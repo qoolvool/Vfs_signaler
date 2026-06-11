@@ -52,6 +52,13 @@ def run(config_path: str = "config.yaml") -> None:
                         already_notified = True
                         last_notified_at = time.time()
                 else:
+                    if already_notified:
+                        notifier.send(
+                            "VFS bot: слот для "
+                            f"{config.vfs.application_centre} / "
+                            f"{config.vfs.category} / {config.vfs.sub_category} "
+                            "больше недоступен."
+                        )
                     already_notified = False
                     last_notified_at = None
             except Exception:
