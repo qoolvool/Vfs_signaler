@@ -4,7 +4,8 @@ vfs:
   application_centre: "Visa Application Centre, Belgrade"
   category: "C visa"
   sub_category: "Tourist , Visit , Business"
-  poll_interval_seconds: 300
+  poll_interval_min_seconds: 120
+  poll_interval_max_seconds: 300
   headless: false
   storage_state_path: "storage_state.json"
 

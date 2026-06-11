@@ -1,7 +1,7 @@
 import logging
+import random
 import sys
 import time
-import traceback
 
 from .browser import BrowserSession
 from .client import VFSClient
@@ -51,7 +51,12 @@ def run(config_path: str = "config.yaml") -> None:
                 logger.exception("Error during polling cycle")
                 notifier.send("VFS bot: произошла ошибка, см. логи.")
 
-            time.sleep(config.vfs.poll_interval_seconds)
+            delay = random.randint(
+                config.vfs.poll_interval_min_seconds,
+                config.vfs.poll_interval_max_seconds,
+            )
+            logger.info("Next check in %d seconds", delay)
+            time.sleep(delay)
 
 
 if __name__ == "__main__":
