@@ -16,6 +16,7 @@ class VFSConfig:
     sub_category: str
     poll_interval_min_seconds: int = 120
     poll_interval_max_seconds: int = 300
+    reminder_interval_seconds: int = 0
     headless: bool = False
     storage_state_path: str = "storage_state.json"
     email: str = field(default_factory=lambda: os.environ.get("VFS_EMAIL", ""))

@@ -25,6 +25,7 @@ def run(config_path: str = "config.yaml") -> None:
         notifier.send("VFS bot: мониторинг слотов запущен.")
 
         already_notified = False
+        last_notified_at: float | None = None
         while True:
             try:
                 if not client.open_appointments():
@@ -34,7 +35,14 @@ def run(config_path: str = "config.yaml") -> None:
                     client.open_appointments()
 
                 if client.has_available_slot():
-                    if not already_notified:
+                    reminder = config.vfs.reminder_interval_seconds
+                    due_for_reminder = (
+                        already_notified
+                        and reminder > 0
+                        and last_notified_at is not None
+                        and time.time() - last_notified_at >= reminder
+                    )
+                    if not already_notified or due_for_reminder:
                         notifier.send(
                             "VFS bot: появился свободный слот для "
                             f"{config.vfs.application_centre} / "
@@ -42,8 +50,10 @@ def run(config_path: str = "config.yaml") -> None:
                             "Зайдите на сайт и забронируйте его."
                         )
                         already_notified = True
+                        last_notified_at = time.time()
                 else:
                     already_notified = False
+                    last_notified_at = None
             except Exception:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")
