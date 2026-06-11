@@ -19,3 +19,10 @@ imap:
   poll_interval_seconds: 5
 
 telegram: {}
+
+# Optional. Strongly recommended to use a residential proxy — Cloudflare
+# usually blocks VFS access from datacenter IPs. Leave server empty to run
+# without a proxy. Credentials can also be set via PROXY_USERNAME/PROXY_PASSWORD
+# in .env instead of putting them here.
+proxy:
+  server: ""   # e.g. "http://1.2.3.4:8080" or "socks5://1.2.3.4:1080"

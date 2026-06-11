@@ -1,9 +1,12 @@
+import logging
 from pathlib import Path
 
 from playwright.sync_api import BrowserContext, sync_playwright
 from playwright_stealth import Stealth
 
-from .config import VFSConfig
+from .config import ProxyConfig, VFSConfig
+
+logger = logging.getLogger(__name__)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -14,15 +17,22 @@ USER_AGENT = (
 class BrowserSession:
     """Owns the Playwright browser/context lifecycle and persists cookies between runs."""
 
-    def __init__(self, config: VFSConfig):
+    def __init__(self, config: VFSConfig, proxy: ProxyConfig | None = None):
         self.config = config
+        self.proxy = proxy
         self._playwright = None
         self._browser = None
         self.context: BrowserContext | None = None
 
     def __enter__(self) -> "BrowserSession":
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self.config.headless)
+
+        launch_kwargs: dict = {"headless": self.config.headless}
+        if self.proxy and self.proxy.enabled:
+            launch_kwargs["proxy"] = self.proxy.to_playwright()
+            logger.info("Routing browser traffic through proxy %s", self.proxy.server)
+
+        self._browser = self._playwright.chromium.launch(**launch_kwargs)
 
         storage_state = (
             self.config.storage_state_path

@@ -18,7 +18,7 @@ def run(config_path: str = "config.yaml") -> None:
     mailbox = OTPMailbox(config.imap)
     notifier = TelegramNotifier(config.telegram)
 
-    with BrowserSession(config.vfs) as session:
+    with BrowserSession(config.vfs, config.proxy) as session:
         page = session.new_page()
         client = VFSClient(page, config, mailbox)
 

@@ -42,10 +42,33 @@ class TelegramConfig:
 
 
 @dataclass
+class ProxyConfig:
+    # e.g. "http://host:port" or "socks5://host:port". Empty disables the proxy.
+    server: str = field(default_factory=lambda: os.environ.get("PROXY_SERVER", ""))
+    username: str = field(default_factory=lambda: os.environ.get("PROXY_USERNAME", ""))
+    password: str = field(default_factory=lambda: os.environ.get("PROXY_PASSWORD", ""))
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.server)
+
+    def to_playwright(self) -> dict | None:
+        if not self.enabled:
+            return None
+        proxy: dict = {"server": self.server}
+        if self.username:
+            proxy["username"] = self.username
+        if self.password:
+            proxy["password"] = self.password
+        return proxy
+
+
+@dataclass
 class AppConfig:
     vfs: VFSConfig
     imap: IMAPConfig
     telegram: TelegramConfig
+    proxy: ProxyConfig
 
 
 def load_config(path: str = "config.yaml") -> AppConfig:
@@ -56,4 +79,5 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         vfs=VFSConfig(**raw["vfs"]),
         imap=IMAPConfig(**raw["imap"]),
         telegram=TelegramConfig(**(raw.get("telegram") or {})),
+        proxy=ProxyConfig(**(raw.get("proxy") or {})),
     )
