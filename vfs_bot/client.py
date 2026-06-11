@@ -25,13 +25,15 @@ class VFSClient:
     # ------------------------------------------------------------------
     # Session state
     # ------------------------------------------------------------------
-    def is_logged_in(self) -> bool:
+    def open_appointments(self) -> bool:
+        """Navigates to the appointment page. Returns True if logged in,
+        False if the site redirected to the login page."""
         self.page.goto(self.config.vfs.appointment_url, wait_until="domcontentloaded")
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
             return False
         except PlaywrightTimeoutError:
-            return True
+            return bool(re.search(r"/login", self.page.url, re.I)) is False
 
     # ------------------------------------------------------------------
     # Login + OTP flow
@@ -100,10 +102,10 @@ class VFSClient:
     # Appointment availability
     # ------------------------------------------------------------------
     def has_available_slot(self) -> bool:
+        """Checks the already-open appointment page for available slots.
+        Assumes `open_appointments()` was called first."""
         page = self.page
         vfs = self.config.vfs
-
-        page.goto(vfs.appointment_url, wait_until="domcontentloaded")
 
         self._select_dropdown("Choose your Application Centre", vfs.application_centre)
         self._select_dropdown("Choose your appointment category", vfs.category)
@@ -158,3 +160,12 @@ class VFSClient:
     def _click_first(self, candidates) -> None:
         locator = self._first_visible(candidates)
         locator.click()
+
+    def save_debug_screenshot(self, name: str) -> str | None:
+        path = f"debug_{name}_{int(time.time())}.png"
+        try:
+            self.page.screenshot(path=path, full_page=True)
+            return path
+        except Exception:
+            logger.exception("Failed to capture debug screenshot")
+            return None

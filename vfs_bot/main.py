@@ -22,19 +22,16 @@ def run(config_path: str = "config.yaml") -> None:
         page = session.new_page()
         client = VFSClient(page, config, mailbox)
 
-        if not client.is_logged_in():
-            notifier.send("VFS bot: вход в аккаунт...")
-            client.login()
-            notifier.send("VFS bot: вход выполнен успешно.")
-
         notifier.send("VFS bot: мониторинг слотов запущен.")
 
         already_notified = False
         while True:
             try:
-                if not client.is_logged_in():
-                    notifier.send("VFS bot: сессия истекла, повторный вход...")
+                if not client.open_appointments():
+                    notifier.send("VFS bot: требуется вход в аккаунт...")
                     client.login()
+                    notifier.send("VFS bot: вход выполнен успешно.")
+                    client.open_appointments()
 
                 if client.has_available_slot():
                     if not already_notified:
@@ -49,7 +46,9 @@ def run(config_path: str = "config.yaml") -> None:
                     already_notified = False
             except Exception:
                 logger.exception("Error during polling cycle")
-                notifier.send("VFS bot: произошла ошибка, см. логи.")
+                shot = client.save_debug_screenshot("error")
+                suffix = f" (скриншот: {shot})" if shot else ""
+                notifier.send(f"VFS bot: произошла ошибка, см. логи.{suffix}")
 
             delay = random.randint(
                 config.vfs.poll_interval_min_seconds,

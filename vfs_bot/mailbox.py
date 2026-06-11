@@ -1,11 +1,23 @@
 import email
 import email.message
 import email.utils
+import html
 import imaplib
+import logging
 import re
 import time
 
 from .config import IMAPConfig
+
+logger = logging.getLogger(__name__)
+
+# Prefer a number that sits right after an OTP-related keyword; this avoids
+# grabbing unrelated digits (tracking ids, years, CSS values) from HTML emails.
+OTP_KEYWORD_REGEX = re.compile(
+    r"(?:one[\s-]*time[\s-]*password|otp|verification\s+code|"
+    r"security\s+code|password|code)\D{0,40}?(\d{4,8})",
+    re.IGNORECASE,
+)
 
 
 class OTPMailbox:
@@ -38,22 +50,42 @@ class OTPMailbox:
                             continue
 
                         msg = email.message_from_bytes(msg_data[0][1])
-                        received = email.utils.mktime_tz(
-                            email.utils.parsedate_tz(msg["Date"])
-                        )
-                        if received < after_timestamp - 30:
-                            continue
+                        parsed_date = email.utils.parsedate_tz(msg["Date"] or "")
+                        if parsed_date is not None:
+                            received = email.utils.mktime_tz(parsed_date)
+                            if received < after_timestamp - 30:
+                                continue
 
-                        match = pattern.search(self._get_body(msg))
-                        if match:
+                        otp = self._extract_otp(self._get_body(msg), pattern)
+                        if otp:
                             conn.store(msg_id, "+FLAGS", "\\Seen")
-                            return match.group(1)
+                            return otp
             finally:
                 conn.logout()
 
             time.sleep(self.config.poll_interval_seconds)
 
         raise TimeoutError("OTP email was not received in time")
+
+    @staticmethod
+    def _extract_otp(body: str, fallback_pattern: re.Pattern) -> str | None:
+        text = OTPMailbox._html_to_text(body)
+
+        keyword_match = OTP_KEYWORD_REGEX.search(text)
+        if keyword_match:
+            return keyword_match.group(1)
+
+        fallback_match = fallback_pattern.search(text)
+        if fallback_match:
+            logger.warning("OTP found via fallback regex (no keyword anchor)")
+            return fallback_match.group(1)
+        return None
+
+    @staticmethod
+    def _html_to_text(content: str) -> str:
+        content = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", content)
+        content = re.sub(r"(?s)<[^>]+>", " ", content)
+        return html.unescape(content)
 
     @staticmethod
     def _get_body(msg: email.message.Message) -> str:
