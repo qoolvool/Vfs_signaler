@@ -6,6 +6,7 @@ from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from .config import AppConfig
+from .human import human_click, human_type, random_delay
 from .mailbox import OTPMailbox
 
 logger = logging.getLogger(__name__)
@@ -43,8 +44,9 @@ class VFSClient:
         vfs = self.config.vfs
 
         page.goto(vfs.login_url, wait_until="domcontentloaded")
+        random_delay(500, 1500)
 
-        self._fill_first(
+        self._type_first(
             [
                 lambda: page.get_by_label("Email", exact=False),
                 lambda: page.get_by_placeholder(re.compile("email", re.I)),
@@ -52,7 +54,8 @@ class VFSClient:
             ],
             vfs.email,
         )
-        self._fill_first(
+        random_delay(200, 700)
+        self._type_first(
             [
                 lambda: page.get_by_label("Password", exact=False),
                 lambda: page.locator("input[type='password']"),
@@ -78,7 +81,8 @@ class VFSClient:
         )
 
         otp = self.mailbox.wait_for_otp(after_timestamp=request_time)
-        otp_input.fill(otp)
+        random_delay(400, 1200)
+        human_type(otp_input, otp)
 
         self._wait_for_cloudflare()
 
@@ -108,7 +112,9 @@ class VFSClient:
         vfs = self.config.vfs
 
         self._select_dropdown("Choose your Application Centre", vfs.application_centre)
+        random_delay(300, 800)
         self._select_dropdown("Choose your appointment category", vfs.category)
+        random_delay(300, 800)
         self._select_dropdown("Choose your sub-category", vfs.sub_category)
 
         page.wait_for_timeout(2000)
@@ -153,13 +159,13 @@ class VFSClient:
                 last_error = exc
         raise last_error or PlaywrightTimeoutError("No matching element found")
 
-    def _fill_first(self, candidates, value: str) -> None:
+    def _type_first(self, candidates, value: str) -> None:
         locator = self._first_visible(candidates)
-        locator.fill(value)
+        human_type(locator, value)
 
     def _click_first(self, candidates) -> None:
         locator = self._first_visible(candidates)
-        locator.click()
+        human_click(self.page, locator)
 
     def save_debug_screenshot(self, name: str) -> str | None:
         path = f"debug_{name}_{int(time.time())}.png"
