@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from playwright.sync_api import BrowserContext, sync_playwright
@@ -50,7 +53,7 @@ class BrowserSession:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         if self.context:
-            self.context.storage_state(path=self.config.storage_state_path)
+            self.save_state()
             self.context.close()
         if self._browser:
             self._browser.close()
@@ -59,3 +62,26 @@ class BrowserSession:
 
     def new_page(self):
         return self.context.new_page()
+
+    def save_state(self) -> None:
+        """Persists cookies/storage to disk now, so a killed process doesn't
+        lose a session that required a fresh login + OTP to obtain."""
+        if not self.context:
+            return
+
+        target = Path(self.config.storage_state_path)
+        state = self.context.storage_state()
+
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=f".{target.name}.", dir=str(target.parent) or "."
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+            os.replace(tmp_path, target)
+        except Exception:
+            logger.exception("Failed to save browser storage state")
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass

@@ -33,6 +33,7 @@ def run(config_path: str = "config.yaml") -> None:
                     client.login()
                     notifier.send("VFS bot: вход выполнен успешно.")
                     client.open_appointments()
+                    session.save_state()
 
                 if client.has_available_slot():
                     reminder = config.vfs.reminder_interval_seconds
@@ -66,6 +67,8 @@ def run(config_path: str = "config.yaml") -> None:
                 shot = client.save_debug_screenshot("error")
                 suffix = f" (скриншот: {shot})" if shot else ""
                 notifier.send(f"VFS bot: произошла ошибка, см. логи.{suffix}")
+
+            session.save_state()
 
             delay = random.randint(
                 config.vfs.poll_interval_min_seconds,
