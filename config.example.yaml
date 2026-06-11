@@ -1,0 +1,20 @@
+vfs:
+  login_url: "https://visa.vfsglobal.com/srb/en/hrv/login"
+  appointment_url: "https://visa.vfsglobal.com/srb/en/hrv/book-appointment"
+  application_centre: "Visa Application Centre, Belgrade"
+  category: "C visa"
+  sub_category: "Tourist , Visit , Business"
+  poll_interval_seconds: 300
+  headless: false
+  storage_state_path: "storage_state.json"
+
+imap:
+  host: "imap.gmail.com"
+  port: 993
+  folder: "INBOX"
+  sender_filter: "vfsglobal"
+  otp_regex: '\b(\d{4,8})\b'
+  poll_timeout_seconds: 120
+  poll_interval_seconds: 5
+
+telegram: {}
