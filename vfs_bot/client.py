@@ -85,11 +85,7 @@ class VFSClient:
 
         logger.info("Login step: clicking Sign In (credentials)")
         request_time = time.time()
-        self._click_first(
-            [
-                lambda: page.get_by_role("button", name=re.compile("sign in", re.I)),
-            ]
-        )
+        self._click_sign_in()
 
         logger.info("Login step: waiting for OTP input field")
         otp_input = self._first_visible(
@@ -112,16 +108,37 @@ class VFSClient:
         self._wait_for_cloudflare()
 
         logger.info("Login step: clicking Sign In (OTP)")
-        self._click_first(
-            [
-                lambda: page.get_by_role("button", name=re.compile("sign in", re.I)),
-            ]
-        )
+        self._click_sign_in()
 
         logger.info("Login step: waiting for redirect to appointment page")
         page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
         self._step_screenshot("06_login_success")
         logger.info("Login successful")
+
+    def _click_sign_in(self) -> None:
+        """Clicks the Sign In button, waiting for it to become enabled first.
+        VFS often keeps this button disabled until the Cloudflare token has
+        actually landed in a hidden field, which can lag behind the visible
+        'Success' indicator by a second or two."""
+        page = self.page
+        locator = self._first_visible(
+            [
+                lambda: page.get_by_role("button", name=re.compile("sign in", re.I)),
+                lambda: page.locator("button:has-text('Sign In')"),
+                lambda: page.locator("input[type='submit']"),
+                lambda: page.get_by_text(re.compile(r"^\s*sign in\s*$", re.I)),
+            ]
+        )
+
+        deadline = time.time() + 15
+        while time.time() < deadline and not locator.is_enabled():
+            logger.info("Sign In button is disabled, waiting...")
+            page.wait_for_timeout(500)
+
+        if not locator.is_enabled():
+            logger.warning("Sign In button still disabled after 15s, clicking anyway")
+
+        human_click(page, locator)
 
     def _accept_cookies(self, timeout: int = 5000) -> None:
         """Dismisses the cookie consent banner if present. Best-effort and
