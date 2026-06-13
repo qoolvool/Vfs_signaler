@@ -30,12 +30,28 @@ class BrowserSession:
     def __enter__(self) -> "BrowserSession":
         self._playwright = sync_playwright().start()
 
-        launch_kwargs: dict = {"headless": self.config.headless}
+        launch_kwargs: dict = {
+            "headless": self.config.headless,
+            "channel": "chrome",
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+            ],
+        }
         if self.proxy and self.proxy.enabled:
             launch_kwargs["proxy"] = self.proxy.to_playwright()
             logger.info("Routing browser traffic through proxy %s", self.proxy.server)
 
-        self._browser = self._playwright.chromium.launch(**launch_kwargs)
+        try:
+            self._browser = self._playwright.chromium.launch(**launch_kwargs)
+        except Exception:
+            logger.warning(
+                "Failed to launch Google Chrome (channel='chrome'), "
+                "falling back to bundled Chromium. Install Google Chrome "
+                "for better Cloudflare pass rates.",
+                exc_info=True,
+            )
+            launch_kwargs.pop("channel")
+            self._browser = self._playwright.chromium.launch(**launch_kwargs)
 
         storage_state = (
             self.config.storage_state_path

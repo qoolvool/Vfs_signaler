@@ -19,6 +19,14 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+Бот запускает **настоящий Google Chrome** (через `channel="chrome"`), а не встроенный
+Chromium — это снижает вероятность блокировки Cloudflare. Поэтому на компьютере
+должен быть установлен Google Chrome:
+- Скачайте и установите с [google.com/chrome](https://www.google.com/chrome/).
+
+Если Chrome не найден, бот автоматически переключится на встроенный Chromium
+(но шансы пройти Cloudflare ниже).
+
 ## Настройка
 
 1. Скопируйте `.env.example` в `.env` и заполните:
