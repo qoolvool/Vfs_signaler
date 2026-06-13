@@ -23,7 +23,8 @@ imap:
   host: "imap.gmail.com"
   port: 993
   folder: "INBOX"
-  sender_filter: "vfsglobal"
+  # VFS sends the OTP from donotreply@vfshelpline.com (not vfsglobal.com).
+  sender_filter: "vfshelpline.com"
   otp_regex: '\b(\d{4,8})\b'
   poll_timeout_seconds: 120
   poll_interval_seconds: 5
