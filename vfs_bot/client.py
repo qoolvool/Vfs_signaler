@@ -167,27 +167,61 @@ class VFSClient:
         except Exception:
             pass
 
-        # If the challenge auto-passes, "Success" shows up quickly and we are
-        # done. Give it a short window first.
-        if self._cloudflare_success_visible(timeout=8000):
-            return
+        deadline = time.time() + timeout / 1000
+        clicked = False
+        click_after = time.time() + 6  # give it time to auto-pass first
+        while time.time() < deadline:
+            if self._cloudflare_passed():
+                logger.info("Cloudflare challenge passed")
+                return
+            # If it hasn't auto-passed after a few seconds, try clicking the
+            # checkbox once (some configs require an explicit interaction).
+            if not clicked and time.time() > click_after:
+                self._click_turnstile_checkbox()
+                clicked = True
+            page.wait_for_timeout(1000)
 
-        # Otherwise try to interact with the Turnstile checkbox the way a user
-        # would: move the mouse onto it and click. The widget lives inside a
-        # cross-origin iframe, so we click by viewport coordinates.
-        self._click_turnstile_checkbox()
+        logger.warning("Cloudflare pass not confirmed within timeout, continuing anyway")
 
-        if not self._cloudflare_success_visible(timeout=timeout):
-            logger.warning("Cloudflare 'Success' indicator was not seen, continuing anyway")
+    def _cloudflare_passed(self) -> bool:
+        """Detects whether the Cloudflare/Turnstile challenge is solved.
+        The reliable signal is the hidden token field in the *main* DOM;
+        the visible 'Success' text lives inside a cross-origin iframe and is
+        not reachable via page.get_by_text()."""
+        page = self.page
 
-    def _cloudflare_success_visible(self, timeout: int) -> bool:
+        # 1) Hidden Turnstile/Recaptcha token populated => challenge solved.
         try:
-            self.page.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.wait_for(
-                state="visible", timeout=timeout
+            token = page.evaluate(
+                "() => { const el = document.querySelector("
+                "'[name=\"cf-turnstile-response\"], "
+                "[name=\"g-recaptcha-response\"]'); "
+                "return el ? el.value : ''; }"
             )
-            return True
-        except PlaywrightTimeoutError:
-            return False
+            if token:
+                return True
+        except Exception:
+            pass
+
+        # 2) "Success" text rendered inside the Turnstile iframe.
+        try:
+            frame = page.frame_locator(
+                "iframe[src*='challenges.cloudflare.com'], "
+                "iframe[title*='Cloudflare' i], iframe[title*='challenge' i]"
+            )
+            if frame.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.is_visible():
+                return True
+        except Exception:
+            pass
+
+        # 3) Some flows render "Success" in the main document.
+        try:
+            if page.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.is_visible():
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def _click_turnstile_checkbox(self) -> None:
         """Best-effort: locate the Cloudflare Turnstile iframe, move the mouse
