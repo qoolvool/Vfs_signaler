@@ -1,7 +1,7 @@
 import random
 import time
 
-from playwright.sync_api import Locator, Page
+from patchright.sync_api import Locator, Page
 
 
 def random_delay(min_ms: int = 300, max_ms: int = 900) -> None:

@@ -16,12 +16,14 @@
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-playwright install chromium
+patchright install chromium
 ```
 
-Бот запускает **настоящий Google Chrome** (через `channel="chrome"`), а не встроенный
-Chromium — это снижает вероятность блокировки Cloudflare. Поэтому на компьютере
-должен быть установлен Google Chrome:
+Бот использует **[patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)**
+(форк Playwright, скрывающий признаки автоматизации на уровне CDP) и запускает
+**настоящий Google Chrome** (через `channel="chrome"`), а не встроенный Chromium —
+это сильно снижает вероятность блокировки Cloudflare. Поэтому на компьютере должен
+быть установлен Google Chrome:
 - Скачайте и установите с [google.com/chrome](https://www.google.com/chrome/).
 
 Если Chrome не найден, бот автоматически переключится на встроенный Chromium

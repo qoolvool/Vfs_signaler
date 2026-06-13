@@ -4,18 +4,11 @@ import os
 import tempfile
 from pathlib import Path
 
-from playwright.sync_api import BrowserContext, sync_playwright
-from playwright_stealth import Stealth
+from patchright.sync_api import BrowserContext, sync_playwright
 
 from .config import ProxyConfig, VFSConfig
 
 logger = logging.getLogger(__name__)
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
-
 
 class BrowserSession:
     """Owns the Playwright browser/context lifecycle and persists cookies between runs."""
@@ -30,12 +23,12 @@ class BrowserSession:
     def __enter__(self) -> "BrowserSession":
         self._playwright = sync_playwright().start()
 
+        # patchright recommends launching plain (no extra args, no custom
+        # user agent) so its anti-detection patches stay internally
+        # consistent with the rest of the browser's fingerprint.
         launch_kwargs: dict = {
             "headless": self.config.headless,
             "channel": "chrome",
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-            ],
         }
         if self.proxy and self.proxy.enabled:
             launch_kwargs["proxy"] = self.proxy.to_playwright()
@@ -59,12 +52,10 @@ class BrowserSession:
             else None
         )
         self.context = self._browser.new_context(
-            user_agent=USER_AGENT,
             locale="en-US",
             viewport={"width": 1366, "height": 900},
             storage_state=storage_state,
         )
-        Stealth().apply_stealth_sync(self.context)
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
