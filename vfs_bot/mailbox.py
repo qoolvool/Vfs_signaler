@@ -27,44 +27,106 @@ class OTPMailbox:
         self.config = config
 
     def _connect(self) -> imaplib.IMAP4_SSL:
+        logger.info(
+            "IMAP: connecting to %s:%s as %s",
+            self.config.host,
+            self.config.port,
+            self.config.username,
+        )
         conn = imaplib.IMAP4_SSL(self.config.host, self.config.port)
         conn.login(self.config.username, self.config.password)
         conn.select(self.config.folder)
+        logger.info("IMAP: logged in, folder '%s' selected", self.config.folder)
         return conn
 
     def wait_for_otp(self, after_timestamp: float) -> str:
         """Polls the mailbox until an OTP email that arrived after `after_timestamp` is found."""
         deadline = time.time() + self.config.poll_timeout_seconds
         pattern = re.compile(self.config.otp_regex)
+        logger.info(
+            "IMAP: waiting up to %ss for OTP email from '%s'",
+            self.config.poll_timeout_seconds,
+            self.config.sender_filter,
+        )
 
+        attempt = 0
         while time.time() < deadline:
-            conn = self._connect()
+            attempt += 1
+            try:
+                conn = self._connect()
+            except Exception:
+                logger.exception(
+                    "IMAP: failed to connect/login. Check IMAP_USERNAME / "
+                    "IMAP_PASSWORD (Gmail needs an app password) and that IMAP "
+                    "is enabled in your mailbox settings."
+                )
+                raise
+
             try:
                 status, data = conn.search(
                     None, "UNSEEN", "FROM", f'"{self.config.sender_filter}"'
                 )
+                msg_ids = data[0].split() if (status == "OK" and data and data[0]) else []
+                logger.info(
+                    "IMAP: poll #%d — found %d unread message(s) from '%s'",
+                    attempt,
+                    len(msg_ids),
+                    self.config.sender_filter,
+                )
                 if status == "OK":
-                    for msg_id in reversed(data[0].split()):
+                    for msg_id in reversed(msg_ids):
                         status, msg_data = conn.fetch(msg_id, "(RFC822)")
                         if status != "OK" or not msg_data or not msg_data[0]:
                             continue
 
                         msg = email.message_from_bytes(msg_data[0][1])
+                        subject = str(msg["Subject"] or "(no subject)")
+                        sender = str(msg["From"] or "(unknown)")
+                        date_hdr = str(msg["Date"] or "(no date)")
+                        logger.info(
+                            "IMAP: examining message — from=%s | subject=%s | date=%s",
+                            sender,
+                            subject,
+                            date_hdr,
+                        )
+
                         parsed_date = email.utils.parsedate_tz(msg["Date"] or "")
                         if parsed_date is not None:
                             received = email.utils.mktime_tz(parsed_date)
                             if received < after_timestamp - 30:
+                                logger.info(
+                                    "IMAP: skipping — message is older than the "
+                                    "login attempt (likely a previous code)"
+                                )
                                 continue
 
                         otp = self._extract_otp(self._get_body(msg), pattern)
                         if otp:
+                            logger.info("IMAP: OTP extracted from email: %s", otp)
                             conn.store(msg_id, "+FLAGS", "\\Seen")
                             return otp
+                        else:
+                            logger.warning(
+                                "IMAP: no OTP code found in this message body "
+                                "(regex did not match)"
+                            )
             finally:
                 conn.logout()
 
+            logger.info(
+                "IMAP: no matching OTP yet, retrying in %ss",
+                self.config.poll_interval_seconds,
+            )
             time.sleep(self.config.poll_interval_seconds)
 
+        logger.error(
+            "IMAP: OTP email not received within %ss. Check that the code was "
+            "actually sent, the sender_filter ('%s') matches the real sender, "
+            "and the email is in the '%s' folder (not Spam).",
+            self.config.poll_timeout_seconds,
+            self.config.sender_filter,
+            self.config.folder,
+        )
         raise TimeoutError("OTP email was not received in time")
 
     @staticmethod
