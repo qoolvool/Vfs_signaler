@@ -63,16 +63,22 @@ class OTPMailbox:
                 raise
 
             try:
+                # Search ALL messages from the sender (not only UNSEEN): the
+                # user may have opened the email manually, which would clear the
+                # UNSEEN flag and hide it. Correctness is ensured by the
+                # after_timestamp check below.
                 status, data = conn.search(
-                    None, "UNSEEN", "FROM", f'"{self.config.sender_filter}"'
+                    None, "FROM", f'"{self.config.sender_filter}"'
                 )
                 msg_ids = data[0].split() if (status == "OK" and data and data[0]) else []
                 logger.info(
-                    "IMAP: poll #%d — found %d unread message(s) from '%s'",
+                    "IMAP: poll #%d — found %d message(s) from '%s'",
                     attempt,
                     len(msg_ids),
                     self.config.sender_filter,
                 )
+                if not msg_ids:
+                    self._log_recent_senders(conn)
                 if status == "OK":
                     for msg_id in reversed(msg_ids):
                         status, msg_data = conn.fetch(msg_id, "(RFC822)")
@@ -128,6 +134,37 @@ class OTPMailbox:
             self.config.folder,
         )
         raise TimeoutError("OTP email was not received in time")
+
+    def _log_recent_senders(self, conn: imaplib.IMAP4_SSL, limit: int = 5) -> None:
+        """Diagnostic: when no message matches the sender filter, dump the most
+        recent messages in the folder so the user can see the real From
+        addresses and adjust sender_filter accordingly."""
+        try:
+            status, data = conn.search(None, "ALL")
+            if status != "OK" or not data or not data[0]:
+                logger.info("IMAP diagnostic: mailbox appears empty")
+                return
+            ids = data[0].split()[-limit:]
+            logger.info(
+                "IMAP diagnostic: last %d message(s) in '%s' (to help set "
+                "sender_filter):",
+                len(ids),
+                self.config.folder,
+            )
+            for msg_id in reversed(ids):
+                status, msg_data = conn.fetch(
+                    msg_id, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])"
+                )
+                if status != "OK" or not msg_data or not msg_data[0]:
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                logger.info(
+                    "IMAP diagnostic:   from=%s | subject=%s",
+                    str(msg["From"] or "(unknown)"),
+                    str(msg["Subject"] or "(no subject)"),
+                )
+        except Exception:
+            logger.exception("IMAP diagnostic: failed to list recent senders")
 
     @staticmethod
     def _extract_otp(body: str, fallback_pattern: re.Pattern) -> str | None:
