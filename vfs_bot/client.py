@@ -199,17 +199,17 @@ class VFSClient:
             pass
 
         deadline = time.time() + timeout / 1000
-        clicked = False
-        click_after = time.time() + 6  # give it time to auto-pass first
+        next_click_at = time.time() + 6  # give it time to auto-pass first
         while time.time() < deadline:
             if self._cloudflare_passed():
                 logger.info("Cloudflare challenge passed")
                 return
-            # If it hasn't auto-passed after a few seconds, try clicking the
-            # checkbox once (some configs require an explicit interaction).
-            if not clicked and time.time() > click_after:
+            # If it hasn't auto-passed, keep retrying the checkbox click every
+            # few seconds (some configs require an explicit interaction, and the
+            # widget iframe may only appear after a short delay).
+            if time.time() >= next_click_at:
                 self._click_turnstile_checkbox()
-                clicked = True
+                next_click_at = time.time() + 8
             page.wait_for_timeout(1000)
 
         logger.warning("Cloudflare pass not confirmed within timeout, continuing anyway")
@@ -254,33 +254,82 @@ class VFSClient:
 
         return False
 
-    def _click_turnstile_checkbox(self) -> None:
-        """Best-effort: locate the Cloudflare Turnstile iframe, move the mouse
-        onto its checkbox via a curved path, and click. Non-fatal on failure."""
+    # Selectors that may host or be the Turnstile widget. The widget VFS embeds
+    # is usually a div.cf-turnstile containing a cross-origin iframe; depending
+    # on the build, either the iframe or the container is the clickable target.
+    TURNSTILE_SELECTORS = (
+        "iframe[src*='challenges.cloudflare.com']",
+        "iframe[title*='Cloudflare' i]",
+        "iframe[title*='challenge' i]",
+        "iframe[title*='widget' i]",
+        ".cf-turnstile",
+        "div[class*='turnstile' i]",
+        "#cf-turnstile",
+    )
+
+    def _click_turnstile_checkbox(self) -> bool:
+        """Best-effort: locate the Cloudflare Turnstile widget, move the mouse
+        onto its checkbox via a curved path, and click. Returns True if a click
+        was issued. Non-fatal on failure."""
         page = self.page
+
+        box = None
+        matched = None
+        for selector in self.TURNSTILE_SELECTORS:
+            try:
+                locator = page.locator(selector).first
+                if locator.count() == 0:
+                    continue
+                # Don't require "visible" — Turnstile iframes often report as
+                # not visible to Playwright even when on screen. A bounding box
+                # is enough to aim a real mouse click.
+                candidate = locator.bounding_box()
+                if candidate and candidate["width"] > 0 and candidate["height"] > 0:
+                    box = candidate
+                    matched = selector
+                    break
+            except Exception:
+                continue
+
+        if not box:
+            logger.info("No Cloudflare Turnstile widget found to click yet")
+            # Last resort: try clicking the checkbox directly inside the iframe.
+            return self._click_turnstile_in_frame()
+
+        # The checkbox sits near the left edge of the widget, vertically
+        # centred. Aim for that area with a little jitter.
+        x = box["x"] + min(box["width"] * 0.5, 30) + random.uniform(-4, 4)
+        y = box["y"] + box["height"] * 0.5 + random.uniform(-4, 4)
         try:
-            frame = page.locator(
-                "iframe[src*='challenges.cloudflare.com'], "
-                "iframe[title*='Cloudflare' i], "
-                "iframe[title*='challenge' i]"
-            ).first
-            frame.wait_for(state="visible", timeout=8000)
-            box = frame.bounding_box()
-            if not box:
-                return
-            # The checkbox sits near the left edge of the widget, vertically
-            # centred. Aim for that area with a little jitter.
-            x = box["x"] + min(box["width"] * 0.5, 30) + random.uniform(-4, 4)
-            y = box["y"] + box["height"] * 0.5 + random.uniform(-4, 4)
             human_mouse_move_to(page, x, y)
             random_delay(150, 400)
             page.mouse.click(x, y)
-            logger.info("Clicked Cloudflare Turnstile checkbox area")
+            logger.info("Clicked Cloudflare Turnstile checkbox area (%s)", matched)
             random_delay(400, 900)
-        except PlaywrightTimeoutError:
-            logger.info("No Cloudflare Turnstile iframe found to click")
+            return True
         except Exception:
             logger.exception("Failed to click Cloudflare Turnstile checkbox")
+            return False
+
+    def _click_turnstile_in_frame(self) -> bool:
+        """Fallback: click the checkbox element inside the Turnstile iframe via
+        a frame locator (Playwright can reach cross-origin frames)."""
+        page = self.page
+        try:
+            frame = page.frame_locator(
+                "iframe[src*='challenges.cloudflare.com'], "
+                "iframe[title*='Cloudflare' i], iframe[title*='challenge' i]"
+            )
+            checkbox = frame.locator(
+                "input[type='checkbox'], label, .cb-c, #challenge-stage"
+            ).first
+            checkbox.click(timeout=3000)
+            logger.info("Clicked Turnstile checkbox inside iframe")
+            random_delay(400, 900)
+            return True
+        except Exception:
+            logger.info("Could not click checkbox inside Turnstile iframe")
+            return False
 
     # ------------------------------------------------------------------
     # Appointment availability
