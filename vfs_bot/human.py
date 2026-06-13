@@ -41,3 +41,25 @@ def human_click(page: Page, locator: Locator) -> None:
 
     locator.click()
     random_delay(200, 600)
+
+
+def human_mouse_wander(page: Page, moves: int = 3) -> None:
+    """Drifts the mouse around the viewport in a few curved hops, the way an
+    idle human hand moves. Best-effort: viewport size may be unknown."""
+    viewport = page.viewport_size
+    if not viewport:
+        return
+    width, height = viewport["width"], viewport["height"]
+    for _ in range(moves):
+        x = random.uniform(width * 0.1, width * 0.9)
+        y = random.uniform(height * 0.1, height * 0.9)
+        page.mouse.move(x, y, steps=random.randint(15, 40))
+        random_delay(120, 450)
+
+
+def human_mouse_move_to(page: Page, x: float, y: float) -> None:
+    """Moves the mouse to a point via a short curved approach instead of a
+    teleport, so the trajectory looks hand-driven."""
+    page.mouse.move(x, y, steps=random.randint(15, 35))
+    random_delay(80, 200)
+

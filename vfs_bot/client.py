@@ -1,4 +1,5 @@
 import logging
+import random
 import re
 import time
 from pathlib import Path
@@ -7,7 +8,13 @@ from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from .config import AppConfig
-from .human import human_click, human_type, random_delay
+from .human import (
+    human_click,
+    human_mouse_move_to,
+    human_mouse_wander,
+    human_type,
+    random_delay,
+)
 from .mailbox import OTPMailbox
 
 logger = logging.getLogger(__name__)
@@ -133,12 +140,65 @@ class VFSClient:
             logger.exception("Failed to dismiss cookie consent banner")
 
     def _wait_for_cloudflare(self, timeout: int = 120000) -> None:
+        page = self.page
+
+        # Some idle, hand-like mouse drift before/around the challenge. This is
+        # behavioural camouflage only; it does NOT help against a flagged IP or
+        # browser fingerprint (the usual reason a challenge keeps failing).
+        try:
+            human_mouse_wander(page)
+        except Exception:
+            pass
+
+        # If the challenge auto-passes, "Success" shows up quickly and we are
+        # done. Give it a short window first.
+        if self._cloudflare_success_visible(timeout=8000):
+            return
+
+        # Otherwise try to interact with the Turnstile checkbox the way a user
+        # would: move the mouse onto it and click. The widget lives inside a
+        # cross-origin iframe, so we click by viewport coordinates.
+        self._click_turnstile_checkbox()
+
+        if not self._cloudflare_success_visible(timeout=timeout):
+            logger.warning("Cloudflare 'Success' indicator was not seen, continuing anyway")
+
+    def _cloudflare_success_visible(self, timeout: int) -> bool:
         try:
             self.page.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.wait_for(
                 state="visible", timeout=timeout
             )
+            return True
         except PlaywrightTimeoutError:
-            logger.warning("Cloudflare 'Success' indicator was not seen, continuing anyway")
+            return False
+
+    def _click_turnstile_checkbox(self) -> None:
+        """Best-effort: locate the Cloudflare Turnstile iframe, move the mouse
+        onto its checkbox via a curved path, and click. Non-fatal on failure."""
+        page = self.page
+        try:
+            frame = page.locator(
+                "iframe[src*='challenges.cloudflare.com'], "
+                "iframe[title*='Cloudflare' i], "
+                "iframe[title*='challenge' i]"
+            ).first
+            frame.wait_for(state="visible", timeout=8000)
+            box = frame.bounding_box()
+            if not box:
+                return
+            # The checkbox sits near the left edge of the widget, vertically
+            # centred. Aim for that area with a little jitter.
+            x = box["x"] + min(box["width"] * 0.5, 30) + random.uniform(-4, 4)
+            y = box["y"] + box["height"] * 0.5 + random.uniform(-4, 4)
+            human_mouse_move_to(page, x, y)
+            random_delay(150, 400)
+            page.mouse.click(x, y)
+            logger.info("Clicked Cloudflare Turnstile checkbox area")
+            random_delay(400, 900)
+        except PlaywrightTimeoutError:
+            logger.info("No Cloudflare Turnstile iframe found to click")
+        except Exception:
+            logger.exception("Failed to click Cloudflare Turnstile checkbox")
 
     # ------------------------------------------------------------------
     # Appointment availability
