@@ -145,6 +145,7 @@ class VFSClient:
     def _select_dropdown(self, label_text: str, value: str) -> None:
         page = self.page
 
+        # 1) Native <select> associated with the label via aria/for
         try:
             page.get_by_label(label_text, exact=False).select_option(label=value)
             page.wait_for_timeout(500)
@@ -154,13 +155,47 @@ class VFSClient:
         except Exception:
             pass
 
-        # Fallback: find the label/heading text and look for the nearest <select>
-        # in the same form group.
+        # Find the label/heading text and its surrounding form group, used by
+        # both remaining fallbacks below.
         label = page.get_by_text(label_text, exact=False).first
         container = label.locator(
             "xpath=ancestor::*[self::div or self::section or self::form][1]"
         )
-        container.locator("select").first.select_option(label=value)
+
+        # 2) <select> in the same form group without a proper label association
+        try:
+            select = container.locator("select").first
+            select.wait_for(state="attached", timeout=2000)
+            select.select_option(label=value)
+            page.wait_for_timeout(500)
+            return
+        except PlaywrightTimeoutError:
+            pass
+        except Exception:
+            pass
+
+        # 3) Custom (non-native) dropdown widget: click to open it, then
+        # click the matching option from the list that appears.
+        self._select_custom_dropdown(container, value)
+
+    def _select_custom_dropdown(self, container: Locator, value: str) -> None:
+        page = self.page
+
+        trigger = container.locator(
+            "[role='combobox'], [role='listbox'], "
+            "input[readonly], .dropdown, .select, button"
+        ).first
+        trigger.wait_for(state="visible", timeout=5000)
+        human_click(page, trigger)
+
+        try:
+            option = page.get_by_role("option", name=value, exact=False).first
+            option.wait_for(state="visible", timeout=3000)
+        except PlaywrightTimeoutError:
+            option = page.get_by_text(value, exact=False).last
+            option.wait_for(state="visible", timeout=3000)
+
+        human_click(page, option)
         page.wait_for_timeout(500)
 
     # ------------------------------------------------------------------
