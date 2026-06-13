@@ -12,6 +12,12 @@ vfs:
   reminder_interval_seconds: 0
   headless: false
   storage_state_path: "storage_state.json"
+  # Save a screenshot at each login step (login page, credentials filled,
+  # Cloudflare passed, OTP page, OTP entered, success/failure) into debug_dir
+  # and send the success/failure shot to Telegram. Useful to see what the
+  # bot is doing when running headless/without a GUI.
+  debug_screenshots: true
+  debug_dir: "debug"
 
 imap:
   host: "imap.gmail.com"

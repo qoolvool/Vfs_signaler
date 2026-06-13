@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from pathlib import Path
 
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -43,9 +44,12 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
+        logger.info("Login step: opening login page %s", vfs.login_url)
         page.goto(vfs.login_url, wait_until="domcontentloaded")
         random_delay(500, 1500)
+        self._step_screenshot("01_login_page")
 
+        logger.info("Login step: entering email")
         self._type_first(
             [
                 lambda: page.get_by_label("Email", exact=False),
@@ -55,6 +59,8 @@ class VFSClient:
             vfs.email,
         )
         random_delay(200, 700)
+
+        logger.info("Login step: entering password")
         self._type_first(
             [
                 lambda: page.get_by_label("Password", exact=False),
@@ -62,9 +68,13 @@ class VFSClient:
             ],
             vfs.password,
         )
+        self._step_screenshot("02_credentials_filled")
 
+        logger.info("Login step: waiting for Cloudflare on login page")
         self._wait_for_cloudflare()
+        self._step_screenshot("03_cloudflare_login")
 
+        logger.info("Login step: clicking Sign In (credentials)")
         request_time = time.time()
         self._click_first(
             [
@@ -72,6 +82,7 @@ class VFSClient:
             ]
         )
 
+        logger.info("Login step: waiting for OTP input field")
         otp_input = self._first_visible(
             [
                 lambda: page.get_by_label(re.compile("one time password", re.I)),
@@ -79,20 +90,29 @@ class VFSClient:
             ],
             timeout=60000,
         )
+        self._step_screenshot("04_otp_page")
 
+        logger.info("Login step: waiting for OTP email")
         otp = self.mailbox.wait_for_otp(after_timestamp=request_time)
+        logger.info("Login step: OTP received, entering it")
         random_delay(400, 1200)
         human_type(otp_input, otp)
+        self._step_screenshot("05_otp_entered")
 
+        logger.info("Login step: waiting for Cloudflare on OTP page")
         self._wait_for_cloudflare()
 
+        logger.info("Login step: clicking Sign In (OTP)")
         self._click_first(
             [
                 lambda: page.get_by_role("button", name=re.compile("sign in", re.I)),
             ]
         )
 
+        logger.info("Login step: waiting for redirect to appointment page")
         page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
+        self._step_screenshot("06_login_success")
+        logger.info("Login successful")
 
     def _wait_for_cloudflare(self, timeout: int = 120000) -> None:
         try:
@@ -168,10 +188,21 @@ class VFSClient:
         human_click(self.page, locator)
 
     def save_debug_screenshot(self, name: str) -> str | None:
-        path = f"debug_{name}_{int(time.time())}.png"
+        debug_dir = Path(self.config.vfs.debug_dir)
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        path = str(debug_dir / f"{name}_{int(time.time())}.png")
         try:
             self.page.screenshot(path=path, full_page=True)
             return path
         except Exception:
             logger.exception("Failed to capture debug screenshot")
             return None
+
+    def _step_screenshot(self, name: str) -> None:
+        """Best-effort screenshot of a login step, used for visual debugging.
+        Controlled by vfs.debug_screenshots; failures are non-fatal."""
+        if not self.config.vfs.debug_screenshots:
+            return
+        path = self.save_debug_screenshot(name)
+        if path:
+            logger.info("Saved debug screenshot: %s", path)

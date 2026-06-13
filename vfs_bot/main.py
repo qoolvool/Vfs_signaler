@@ -30,8 +30,21 @@ def run(config_path: str = "config.yaml") -> None:
             try:
                 if not client.open_appointments():
                     notifier.send("VFS bot: требуется вход в аккаунт...")
-                    client.login()
-                    notifier.send("VFS bot: вход выполнен успешно.")
+                    try:
+                        client.login()
+                    except Exception:
+                        logger.exception("Login failed")
+                        shot = client.save_debug_screenshot("login_failed")
+                        if shot:
+                            notifier.send_photo(shot, "VFS bot: вход не удался, см. скриншот")
+                        else:
+                            notifier.send("VFS bot: вход не удался, см. логи.")
+                        raise
+                    shot = client.save_debug_screenshot("login_success")
+                    if shot:
+                        notifier.send_photo(shot, "VFS bot: вход выполнен успешно.")
+                    else:
+                        notifier.send("VFS bot: вход выполнен успешно.")
                     client.open_appointments()
                     session.save_state()
 
@@ -65,8 +78,10 @@ def run(config_path: str = "config.yaml") -> None:
             except Exception:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")
-                suffix = f" (скриншот: {shot})" if shot else ""
-                notifier.send(f"VFS bot: произошла ошибка, см. логи.{suffix}")
+                if shot:
+                    notifier.send_photo(shot, "VFS bot: произошла ошибка, см. логи.")
+                else:
+                    notifier.send("VFS bot: произошла ошибка, см. логи.")
 
             session.save_state()
 

@@ -19,6 +19,8 @@ class VFSConfig:
     reminder_interval_seconds: int = 0
     headless: bool = False
     storage_state_path: str = "storage_state.json"
+    debug_screenshots: bool = True
+    debug_dir: str = "debug"
     email: str = field(default_factory=lambda: os.environ.get("VFS_EMAIL", ""))
     password: str = field(default_factory=lambda: os.environ.get("VFS_PASSWORD", ""))
 

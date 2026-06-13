@@ -26,3 +26,21 @@ class TelegramNotifier:
             )
         except requests.RequestException:
             logger.exception("Failed to send Telegram notification")
+
+    def send_photo(self, path: str, caption: str = "") -> None:
+        logger.info("[screenshot] %s %s", path, caption)
+
+        if not self.config.bot_token or not self.config.chat_id:
+            return
+
+        url = f"https://api.telegram.org/bot{self.config.bot_token}/sendPhoto"
+        try:
+            with open(path, "rb") as photo:
+                requests.post(
+                    url,
+                    data={"chat_id": self.config.chat_id, "caption": caption},
+                    files={"photo": photo},
+                    timeout=30,
+                )
+        except (requests.RequestException, OSError):
+            logger.exception("Failed to send Telegram screenshot")
