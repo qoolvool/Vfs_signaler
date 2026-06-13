@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 NO_SLOTS_TEXT = "no appointment slots are currently available"
 CLOUDFLARE_SUCCESS_TEXT = "Success"
 
+# Phrases shown by Cloudflare/VFS when a request is blocked outright (as
+# opposed to a normal challenge). If the session/cookies are stale or flagged,
+# clearing storage_state.json and starting a fresh session is the usual fix.
+ACCESS_DENIED_PATTERNS = (
+    re.compile(r"access denied", re.I),
+    re.compile(r"you have been blocked", re.I),
+    re.compile(r"attention required", re.I),
+    re.compile(r"error\s*1020", re.I),
+)
+
+
+class AccessDeniedError(RuntimeError):
+    """Raised when VFS/Cloudflare returns a hard block page."""
+
 
 class VFSClient:
     """Drives the VFS Global Croatia (Belgrade) appointment booking site."""
@@ -38,12 +52,26 @@ class VFSClient:
         """Navigates to the appointment page. Returns True if logged in,
         False if the site redirected to the login page."""
         self.page.goto(self.config.vfs.appointment_url, wait_until="domcontentloaded")
+        self.check_access_denied()
         self._accept_cookies()
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
             return False
         except PlaywrightTimeoutError:
             return bool(re.search(r"/login", self.page.url, re.I)) is False
+
+    def check_access_denied(self) -> None:
+        """Raises AccessDeniedError if the current page is a Cloudflare/VFS
+        hard block page (as opposed to a normal challenge)."""
+        try:
+            content = self.page.content()
+        except Exception:
+            return
+        for pattern in ACCESS_DENIED_PATTERNS:
+            if pattern.search(content):
+                raise AccessDeniedError(
+                    f"VFS/Cloudflare returned a block page (matched: {pattern.pattern!r})"
+                )
 
     # ------------------------------------------------------------------
     # Login + OTP flow
@@ -55,6 +83,7 @@ class VFSClient:
         logger.info("Login step: opening login page %s", vfs.login_url)
         page.goto(vfs.login_url, wait_until="domcontentloaded")
         random_delay(500, 1500)
+        self.check_access_denied()
         self._accept_cookies()
         self._step_screenshot("01_login_page")
 

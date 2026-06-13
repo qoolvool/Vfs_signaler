@@ -92,3 +92,22 @@ class BrowserSession:
                 os.remove(tmp_path)
             except OSError:
                 pass
+
+    def clear_state(self) -> None:
+        """Wipes cookies/storage, both in-memory and on disk. Used when VFS
+        returns a hard block (Access Denied) so the next attempt starts with
+        a completely fresh session instead of a possibly-flagged one."""
+        if self.context:
+            try:
+                self.context.clear_cookies()
+            except Exception:
+                logger.exception("Failed to clear in-memory cookies")
+
+        target = Path(self.config.storage_state_path)
+        try:
+            target.unlink()
+            logger.info("Deleted %s to force a fresh session", target)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.exception("Failed to delete %s", target)

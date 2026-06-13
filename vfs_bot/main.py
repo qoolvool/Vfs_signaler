@@ -4,7 +4,7 @@ import sys
 import time
 
 from .browser import BrowserSession
-from .client import VFSClient
+from .client import AccessDeniedError, VFSClient
 from .config import load_config
 from .mailbox import OTPMailbox
 from .notifier import TelegramNotifier
@@ -75,6 +75,23 @@ def run(config_path: str = "config.yaml") -> None:
                         )
                     already_notified = False
                     last_notified_at = None
+            except AccessDeniedError:
+                logger.exception("VFS/Cloudflare returned an access-denied page")
+                shot = client.save_debug_screenshot("access_denied")
+                session.clear_state()
+                already_notified = False
+                last_notified_at = None
+                if shot:
+                    notifier.send_photo(
+                        shot,
+                        "VFS bot: доступ заблокирован (Access Denied), "
+                        "сессия сброшена, попробую снова.",
+                    )
+                else:
+                    notifier.send(
+                        "VFS bot: доступ заблокирован (Access Denied), "
+                        "сессия сброшена, попробую снова."
+                    )
             except Exception:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")
