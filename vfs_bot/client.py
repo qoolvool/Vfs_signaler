@@ -27,6 +27,8 @@ CLOUDFLARE_SUCCESS_TEXT = "Success"
 # clearing storage_state.json and starting a fresh session is the usual fix.
 ACCESS_DENIED_PATTERNS = (
     re.compile(r"access denied", re.I),
+    re.compile(r"unauthoris(?:ed|zed)\s+activity", re.I),
+    re.compile(r"429002"),
     re.compile(r"you have been blocked", re.I),
     re.compile(r"attention required", re.I),
     re.compile(r"error\s*1020", re.I),

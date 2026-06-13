@@ -17,6 +17,9 @@ class VFSConfig:
     poll_interval_min_seconds: int = 120
     poll_interval_max_seconds: int = 300
     reminder_interval_seconds: int = 0
+    # How long to back off after VFS returns a hard block (e.g. 429002
+    # "Unauthorised Activity"). Hammering it only extends the block.
+    access_denied_backoff_seconds: int = 1800
     headless: bool = False
     storage_state_path: str = "storage_state.json"
     debug_screenshots: bool = True

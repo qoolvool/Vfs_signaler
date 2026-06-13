@@ -81,17 +81,20 @@ def run(config_path: str = "config.yaml") -> None:
                 session.clear_state()
                 already_notified = False
                 last_notified_at = None
+                backoff = config.vfs.access_denied_backoff_seconds
+                minutes = max(backoff // 60, 1)
+                msg = (
+                    "VFS bot: доступ заблокирован (Access Denied / 429002 — "
+                    "слишком много запросов). Сессия сброшена, делаю длинную "
+                    f"паузу ~{minutes} мин, чтобы не усугублять блокировку."
+                )
                 if shot:
-                    notifier.send_photo(
-                        shot,
-                        "VFS bot: доступ заблокирован (Access Denied), "
-                        "сессия сброшена, попробую снова.",
-                    )
+                    notifier.send_photo(shot, msg)
                 else:
-                    notifier.send(
-                        "VFS bot: доступ заблокирован (Access Denied), "
-                        "сессия сброшена, попробую снова."
-                    )
+                    notifier.send(msg)
+                logger.info("Backing off for %d seconds after access-denied", backoff)
+                time.sleep(backoff)
+                continue
             except Exception:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")

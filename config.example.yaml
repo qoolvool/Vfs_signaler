@@ -10,6 +10,10 @@ vfs:
   # remains available (in addition to the first one). 0 = notify only once
   # per appearance.
   reminder_interval_seconds: 0
+  # How long (seconds) to pause after VFS hard-blocks with "Access Denied /
+  # 429002 Unauthorised Activity". This is a rate-limit/anti-bot block;
+  # retrying quickly only makes it last longer, so back off (default 30 min).
+  access_denied_backoff_seconds: 1800
   headless: false
   storage_state_path: "storage_state.json"
   # Save a screenshot at each login step (login page, credentials filled,
