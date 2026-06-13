@@ -31,6 +31,7 @@ class VFSClient:
         """Navigates to the appointment page. Returns True if logged in,
         False if the site redirected to the login page."""
         self.page.goto(self.config.vfs.appointment_url, wait_until="domcontentloaded")
+        self._accept_cookies()
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
             return False
@@ -47,6 +48,7 @@ class VFSClient:
         logger.info("Login step: opening login page %s", vfs.login_url)
         page.goto(vfs.login_url, wait_until="domcontentloaded")
         random_delay(500, 1500)
+        self._accept_cookies()
         self._step_screenshot("01_login_page")
 
         logger.info("Login step: entering email")
@@ -113,6 +115,22 @@ class VFSClient:
         page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
         self._step_screenshot("06_login_success")
         logger.info("Login successful")
+
+    def _accept_cookies(self, timeout: int = 5000) -> None:
+        """Dismisses the cookie consent banner if present. Best-effort and
+        non-fatal: if no banner shows up within `timeout`, does nothing."""
+        page = self.page
+        try:
+            button = page.get_by_role(
+                "button", name=re.compile("accept", re.I)
+            ).first
+            button.wait_for(state="visible", timeout=timeout)
+            human_click(page, button)
+            logger.info("Dismissed cookie consent banner")
+        except PlaywrightTimeoutError:
+            pass
+        except Exception:
+            logger.exception("Failed to dismiss cookie consent banner")
 
     def _wait_for_cloudflare(self, timeout: int = 120000) -> None:
         try:
