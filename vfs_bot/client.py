@@ -90,6 +90,8 @@ class VFSClient:
         logger.info("Login step: waiting for OTP input field")
         otp_input = self._first_visible(
             [
+                lambda: page.locator("input[formcontrolname='otp']"),
+                lambda: page.locator("input[name='otp']"),
                 lambda: page.get_by_label(re.compile("one time password", re.I)),
                 lambda: page.get_by_placeholder(re.compile("OTP", re.I)),
             ],
