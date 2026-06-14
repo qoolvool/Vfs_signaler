@@ -20,14 +20,14 @@ patchright install chromium
 ```
 
 The bot uses **[patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)**
-(a Playwright fork that hides automation signals at the CDP level) and launches
+(a Playwright fork tuned for higher automation reliability) and launches
 **real Google Chrome** (via `channel="chrome"`) instead of the bundled
-Chromium — this significantly reduces the chance of a Cloudflare block. So
-Google Chrome must be installed on the machine:
+Chromium — this significantly improves compatibility with the site's anti-bot
+checks. So Google Chrome must be installed on the machine:
 - Download and install it from [google.com/chrome](https://www.google.com/chrome/).
 
 If Chrome is not found, the bot automatically falls back to the bundled
-Chromium (but the chances of passing Cloudflare are lower).
+Chromium (but reliability is lower).
 
 ## Configuration
 
@@ -48,17 +48,19 @@ Chromium (but the chances of passing Cloudflare are lower).
    - `poll_interval_min_seconds` / `poll_interval_max_seconds` — bounds of the
      random interval between checks (default 120–300 sec, i.e. 2–5 minutes).
      A random interval within this range is picked on every cycle so requests
-     aren't perfectly regular and don't look like scraping to Cloudflare.
+     aren't perfectly regular, which is friendlier to the site's
+     bot-detection system.
    - `reminder_interval_seconds` — if > 0, the bot will repeat the Telegram
      notification every N seconds while the slot is still available (useful if
      you didn't notice the first message right away). Default `0` — notify
      only when the slot first appears.
-   - `access_denied_backoff_seconds` — how long to pause after VFS hard-blocks
-     with "Access Denied / 429002 Unauthorised Activity" (a rate-limit block).
-     Retrying quickly only extends the block, so the default is 30 minutes.
+   - `access_denied_backoff_seconds` — how long to pause after VFS responds
+     with "Access Denied / 429002 Unauthorised Activity" (a rate-limit
+     response). Retrying quickly only extends the lockout, so the default is
+     30 minutes.
    - `headless: false` — it's recommended to keep the browser visible,
-     especially on the first run, until you've confirmed Cloudflare/OTP pass
-     successfully.
+     especially on the first run, until you've confirmed the login/OTP flow
+     completes successfully.
 
 ## Running
 
@@ -67,8 +69,8 @@ python -m vfs_bot.main
 ```
 
 On the first run, the bot will:
-1. Open the login page, enter the email/password, and wait for Cloudflare to
-   pass.
+1. Open the login page, enter the email/password, and wait for the anti-bot
+   challenge to complete.
 2. On the OTP page, wait for VFS's email in your mailbox, grab the code, and
    enter it.
 3. After a successful login, save cookies to `storage_state.json` — on
@@ -119,22 +121,22 @@ Besides screenshots, with `headless: false` and access to a graphical
 environment (e.g. X11/VNC on a server, or running on your own machine) you can
 simply watch the open browser window in real time.
 
-## Human-like behaviour
+## Human-paced interactions
 
 During login, the bot doesn't paste the email/password/OTP instantly —
 instead it types them character by character with randomized delays
 (`vfs_bot/human.py`), clears each field before typing like a real user, moves
 the mouse towards buttons before clicking, and adds random pauses between
-steps. This reduces the chance of Cloudflare Turnstile flagging the session as
-automated based on behavioural signals. Because of this, login takes 10-20
-seconds longer — that's expected.
+steps. This makes the automated session behave closer to a real user
+session, improving reliability with the site's anti-bot checks. Because of
+this, login takes 10-20 seconds longer — that's expected.
 
-## Proxy (important for getting past Cloudflare)
+## Proxy (recommended for reliable access)
 
-Cloudflare almost always blocks access to VFS Global from datacenter IPs (VPS,
-cloud, hosting). If the bot sees a page saying something like *"try again in
-one hour"* or fails the challenge, it's almost certainly an IP issue. The
-solution is a **residential or mobile proxy**.
+VFS Global's anti-bot protection is stricter for datacenter IPs (VPS, cloud,
+hosting). If the bot sees a page saying something like *"try again in one
+hour"* or fails the challenge, it's almost certainly an IP issue. The solution
+is a **residential or mobile proxy**.
 
 Configuration: set `proxy.server` in `config.yaml` or `PROXY_SERVER` in
 `.env`:
@@ -149,19 +151,19 @@ aren't stored in the repository. If `server` is empty, the bot runs without a
 proxy.
 
 Recommendations:
-- Use a **residential** proxy, not a datacenter one — Cloudflare blocks the
-  latter too, often aggressively.
+- Use a **residential** proxy, not a datacenter one — datacenter ranges are
+  often flagged too, sometimes aggressively.
 - A **sticky** IP that doesn't change between login and polling is preferable,
   otherwise the session may get invalidated.
 - Pick an IP region close to Serbia/the Balkans if possible.
 
 ## A note on selectors
 
-VFS Global periodically changes its site layout and strengthens Cloudflare
-protection. The selectors in `vfs_bot/client.py` are written to be as robust
-as possible (by label text and button roles), but if the site changes,
-`client.py` will need updating. It helps to run with `headless: false` and/or
-use `playwright codegen https://visa.vfsglobal.com/srb/en/hrv/login` to inspect
+VFS Global periodically changes its site layout and anti-bot protection. The
+selectors in `vfs_bot/client.py` are written to be as robust as possible (by
+label text and button roles), but if the site changes, `client.py` will need
+updating. It helps to run with `headless: false` and/or use
+`playwright codegen https://visa.vfsglobal.com/srb/en/hrv/login` to inspect
 the current markup.
 
 ## Security
