@@ -412,136 +412,86 @@ class VFSClient:
         logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
         return count == 0
 
-    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str | None = None) -> None:
+    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str) -> None:
+        """Selects `value` in the mat-select identified by `formcontrolname`.
+
+        VFS's mat-select labels often have `for`/`aria-labelledby` attributes
+        that don't actually point at the right control, so we go straight to
+        the Angular form control instead of relying on label text.
+        """
         page = self.page
 
-        # 0) Direct match via Angular's formcontrolname attribute. This is the
-        # most reliable option: VFS's mat-select labels often have `for`/
-        # `aria-labelledby` attributes that don't actually point at the right
-        # control, so text-based lookups below can grab the wrong dropdown.
-        if formcontrolname:
-            trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
-            for attempt in range(2):
-                try:
-                    trigger.wait_for(state="visible", timeout=8000)
-                    try:
-                        logger.info(
-                            "Dropdown '%s' (formcontrolname='%s') current text: '%s', classes: '%s'",
-                            label_text,
-                            formcontrolname,
-                            trigger.inner_text(),
-                            trigger.get_attribute("class"),
-                        )
-                    except Exception:
-                        logger.exception("Could not read current state of '%s'", label_text)
-                    self._select_custom_dropdown(trigger, value)
-                    return
-                except Exception:
-                    logger.exception(
-                        "Attempt %d: failed to select '%s' via formcontrolname='%s'",
-                        attempt + 1,
-                        label_text,
-                        formcontrolname,
-                    )
-                    page.wait_for_timeout(1500)
-            # The form's selects use formcontrolname attributes that the
-            # text/select-based fallbacks below don't understand (and the
-            # visible placeholder text doesn't match label_text), so retrying
-            # those would only raise confusing errors. Give up on this field
-            # rather than crash the whole availability check.
-            return
+        trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
+        for attempt in range(2):
+            try:
+                trigger.wait_for(state="visible", timeout=8000)
+                self._select_custom_dropdown(trigger, value)
+                return
+            except Exception:
+                logger.exception(
+                    "Attempt %d: failed to select '%s' (formcontrolname='%s')",
+                    attempt + 1,
+                    label_text,
+                    formcontrolname,
+                )
+                page.wait_for_timeout(1500)
 
-        # 1) Native <select> associated with the label via aria/for
-        try:
-            page.get_by_label(label_text, exact=False).select_option(label=value)
-            page.wait_for_timeout(500)
-            return
-        except PlaywrightTimeoutError:
-            pass
-        except Exception:
-            pass
-
-        # Find the label/heading text and its surrounding form group, used by
-        # both remaining fallbacks below.
-        label = page.get_by_text(label_text, exact=False).first
-        container = label.locator(
-            "xpath=ancestor::*[self::div or self::section or self::form][1]"
-        )
-
-        # 2) <select> in the same form group without a proper label association
-        try:
-            select = container.locator("select").first
-            select.wait_for(state="attached", timeout=2000)
-            select.select_option(label=value)
-            page.wait_for_timeout(500)
-            return
-        except PlaywrightTimeoutError:
-            pass
-        except Exception:
-            pass
-
-        # 3) Custom (non-native) dropdown widget: click to open it, then
-        # click the matching option from the list that appears.
-        trigger = container.locator(
-            "[role='combobox'], [role='listbox'], "
-            "input[readonly], .dropdown, .select, button"
-        ).first
-        trigger.wait_for(state="visible", timeout=5000)
-        self._select_custom_dropdown(trigger, value)
+        logger.warning("Giving up on dropdown '%s'", label_text)
 
     def _select_custom_dropdown(self, trigger: Locator, value: str) -> None:
+        """Clicks the mat-select to open its options panel, then picks the
+        option whose text best matches `value` from the options actually
+        offered, instead of assuming `value` is present verbatim."""
         page = self.page
+        target = self._normalize_text(value)
 
         # The appointment form sometimes pre-selects a value automatically
         # (e.g. when only one application centre is available). If the
         # trigger already shows the value we want, there's nothing to do.
         try:
             current = self._normalize_text(trigger.inner_text())
-            if current == self._normalize_text(value):
+            if current == target:
                 logger.info("'%s' is already selected, skipping", value)
                 return
         except Exception:
             pass
 
-        # Selecting a value can trigger Angular to re-render parts of the
-        # form (e.g. populating the next dropdown's options), which may
-        # detach the panel/option elements mid-click. Retry a few times,
-        # and after each attempt verify the trigger actually shows the
-        # value we picked before giving up.
         for attempt in range(3):
             try:
-                logger.info("Attempt %d: clicking dropdown trigger to select '%s'", attempt + 1, value)
+                logger.info("Attempt %d: opening dropdown to pick '%s'", attempt + 1, value)
                 human_click(page, trigger)
                 page.wait_for_timeout(300)
 
-                try:
-                    option = page.get_by_role("option", name=value, exact=False).first
-                    option.wait_for(state="visible", timeout=5000)
-                    logger.info("Found option for '%s' via role='option'", value)
-                except PlaywrightTimeoutError:
-                    logger.info(
-                        "No role='option' match for '%s', trying get_by_text", value
-                    )
-                    try:
-                        all_options = page.get_by_role("option").all_inner_texts()
-                        logger.info("Visible options in panel: %r", all_options)
-                    except Exception:
-                        logger.exception("Could not list visible options")
-                    option = page.get_by_text(value, exact=False).last
-                    option.wait_for(state="visible", timeout=3000)
-                    logger.info("Found option for '%s' via get_by_text", value)
+                options = page.get_by_role("option")
+                options.first.wait_for(state="visible", timeout=5000)
+                texts = options.all_inner_texts()
+                logger.info("Available options: %r", texts)
 
-                human_click(page, option)
+                match_index = None
+                for i, text in enumerate(texts):
+                    norm = self._normalize_text(text)
+                    if norm == target or target in norm or norm in target:
+                        match_index = i
+                        break
+
+                if match_index is None:
+                    logger.warning("No option matching '%s' among %r", value, texts)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
+                    continue
+
+                logger.info("Selecting option %r for '%s'", texts[match_index], value)
+                human_click(page, options.nth(match_index))
                 page.wait_for_timeout(1000)
 
                 current = self._normalize_text(trigger.inner_text())
-                if current == self._normalize_text(value):
-                    logger.info("'%s' successfully selected", value)
+                if current == target or target in current or current in target:
+                    logger.info("'%s' successfully selected (trigger shows '%s')", value, current)
                     return
                 logger.warning(
-                    "'%s' not reflected after selection (got '%s'), retrying",
-                    value,
+                    "After selecting, trigger shows '%s' (expected '%s'), retrying",
                     current,
+                    value,
                 )
             except Exception:
                 logger.exception("Attempt %d to select '%s' failed, retrying", attempt + 1, value)
