@@ -391,7 +391,9 @@ class VFSClient:
         self._select_dropdown("Choose your Application Centre", vfs.application_centre, "centerCode")
         random_delay(300, 800)
         self._select_dropdown("Choose your appointment category", vfs.category, "selectedSubvisaCategory")
-        random_delay(300, 800)
+        # The sub-category options are loaded by VFS only after a category is
+        # selected, so give the page time to populate them before we try.
+        page.wait_for_timeout(1500)
         self._select_dropdown("Choose your sub-category", vfs.sub_category, "visaCategoryCode")
 
         page.wait_for_timeout(2000)
@@ -408,16 +410,25 @@ class VFSClient:
         # control, so text-based lookups below can grab the wrong dropdown.
         if formcontrolname:
             trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
-            try:
-                trigger.wait_for(state="visible", timeout=5000)
-                self._select_custom_dropdown(trigger, value)
-                return
-            except Exception:
-                logger.exception(
-                    "Failed to select '%s' via formcontrolname='%s', falling back",
-                    label_text,
-                    formcontrolname,
-                )
+            for attempt in range(2):
+                try:
+                    trigger.wait_for(state="visible", timeout=8000)
+                    self._select_custom_dropdown(trigger, value)
+                    return
+                except Exception:
+                    logger.exception(
+                        "Attempt %d: failed to select '%s' via formcontrolname='%s'",
+                        attempt + 1,
+                        label_text,
+                        formcontrolname,
+                    )
+                    page.wait_for_timeout(1500)
+            # The form's selects use formcontrolname attributes that the
+            # text/select-based fallbacks below don't understand (and the
+            # visible placeholder text doesn't match label_text), so retrying
+            # those would only raise confusing errors. Give up on this field
+            # rather than crash the whole availability check.
+            return
 
         # 1) Native <select> associated with the label via aria/for
         try:
@@ -471,17 +482,40 @@ class VFSClient:
         except Exception:
             pass
 
-        human_click(page, trigger)
+        # Selecting a value can trigger Angular to re-render parts of the
+        # form (e.g. populating the next dropdown's options), which may
+        # detach the panel/option elements mid-click. Retry a few times,
+        # and after each attempt verify the trigger actually shows the
+        # value we picked before giving up.
+        for attempt in range(3):
+            try:
+                human_click(page, trigger)
 
-        try:
-            option = page.get_by_role("option", name=value, exact=False).first
-            option.wait_for(state="visible", timeout=3000)
-        except PlaywrightTimeoutError:
-            option = page.get_by_text(value, exact=False).last
-            option.wait_for(state="visible", timeout=3000)
+                try:
+                    option = page.get_by_role("option", name=value, exact=False).first
+                    option.wait_for(state="visible", timeout=5000)
+                except PlaywrightTimeoutError:
+                    option = page.get_by_text(value, exact=False).last
+                    option.wait_for(state="visible", timeout=3000)
 
-        human_click(page, option)
-        page.wait_for_timeout(500)
+                human_click(page, option)
+                page.wait_for_timeout(1000)
+
+                current = self._normalize_text(trigger.inner_text())
+                if current == self._normalize_text(value):
+                    return
+                logger.warning(
+                    "'%s' not reflected after selection (got '%s'), retrying",
+                    value,
+                    current,
+                )
+            except Exception:
+                logger.exception("Attempt %d to select '%s' failed, retrying", attempt + 1, value)
+
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(1000)
+
+        logger.warning("Giving up selecting '%s' after retries", value)
 
     # ------------------------------------------------------------------
     # Locator helpers
