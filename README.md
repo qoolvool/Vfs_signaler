@@ -1,16 +1,16 @@
 # VFS Signaler — VFS Global Croatia (Belgrade) appointment watcher
 
-Бот логинится в личный кабинет [VFS Global Croatia](https://visa.vfsglobal.com/srb/en/hrv/login),
-проходит OTP-подтверждение по почте и периодически проверяет страницу записи
-на свободные слоты для выбранного визового центра / категории / подкатегории.
-При появлении слота бот присылает уведомление в Telegram, а когда слот
-пропадает (был доступен и снова исчез) — присылает отдельное уведомление
-об этом.
+The bot logs into the [VFS Global Croatia](https://visa.vfsglobal.com/srb/en/hrv/login)
+account, completes the OTP confirmation sent by email, and periodically checks
+the appointment page for available slots for the chosen application centre /
+category / sub-category. When a slot appears, the bot sends a Telegram
+notification, and when the slot disappears (was available and is gone again)
+it sends a separate notification about that too.
 
-Бот **не бронирует слот автоматически** — только уведомляет, чтобы вы успели
-зайти и записаться вручную.
+The bot **does not book a slot automatically** — it only notifies you so you
+can go and book it manually in time.
 
-## Установка
+## Installation
 
 ```bash
 python3 -m venv .venv
@@ -19,68 +19,70 @@ pip install -r requirements.txt
 patchright install chromium
 ```
 
-Бот использует **[patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)**
-(форк Playwright, скрывающий признаки автоматизации на уровне CDP) и запускает
-**настоящий Google Chrome** (через `channel="chrome"`), а не встроенный Chromium —
-это сильно снижает вероятность блокировки Cloudflare. Поэтому на компьютере должен
-быть установлен Google Chrome:
-- Скачайте и установите с [google.com/chrome](https://www.google.com/chrome/).
+The bot uses **[patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)**
+(a Playwright fork that hides automation signals at the CDP level) and launches
+**real Google Chrome** (via `channel="chrome"`) instead of the bundled
+Chromium — this significantly reduces the chance of a Cloudflare block. So
+Google Chrome must be installed on the machine:
+- Download and install it from [google.com/chrome](https://www.google.com/chrome/).
 
-Если Chrome не найден, бот автоматически переключится на встроенный Chromium
-(но шансы пройти Cloudflare ниже).
+If Chrome is not found, the bot automatically falls back to the bundled
+Chromium (but the chances of passing Cloudflare are lower).
 
-## Настройка
+## Configuration
 
-1. Скопируйте `.env.example` в `.env` и заполните:
-   - `VFS_EMAIL` / `VFS_PASSWORD` — данные аккаунта VFS Global.
-   - `IMAP_USERNAME` / `IMAP_PASSWORD` — почта, на которую приходит OTP-код
-     (для Gmail используйте [пароль приложения](https://support.google.com/accounts/answer/185833)).
-   - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — для уведомлений (необязательно,
-     если не задано — уведомления только в лог).
-   - `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` — прокси
-     (необязательно, но **настоятельно рекомендуется**, см. ниже).
+1. Copy `.env.example` to `.env` and fill in:
+   - `VFS_EMAIL` / `VFS_PASSWORD` — your VFS Global account credentials.
+   - `IMAP_USERNAME` / `IMAP_PASSWORD` — the mailbox that receives the OTP code
+     (for Gmail, use an [app password](https://support.google.com/accounts/answer/185833)).
+   - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — for notifications (optional;
+     if not set, notifications go to the log only).
+   - `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` — proxy
+     (optional, but **strongly recommended**, see below).
 
-2. Скопируйте `config.example.yaml` в `config.yaml` и при необходимости
-   поменяйте:
-   - `application_centre`, `category`, `sub_category` — те значения, которые
-     отображаются в выпадающих списках на странице записи (например,
+2. Copy `config.example.yaml` to `config.yaml` and adjust as needed:
+   - `application_centre`, `category`, `sub_category` — the exact values
+     shown in the dropdowns on the appointment page (e.g.
      `"Visa Application Centre, Belgrade"`, `"C visa"`,
      `"Tourist , Visit , Business"`).
-   - `poll_interval_min_seconds` / `poll_interval_max_seconds` — границы
-     случайного интервала между проверками (по умолчанию 120–300 сек, т.е.
-     2–5 минут). Интервал выбирается случайно в этом диапазоне на каждом
-     цикле, чтобы запросы не были идеально регулярными и не выглядели как
-     скрапинг для Cloudflare.
-   - `reminder_interval_seconds` — если > 0, бот будет повторять уведомление
-     в Telegram каждые N секунд, пока слот всё ещё доступен (полезно, если вы
-     не сразу заметили первое сообщение). По умолчанию `0` — уведомление
-     только при первом появлении слота.
-   - `headless: false` — рекомендуется держать браузер видимым, особенно при
-     первом запуске, пока вы не убедитесь, что Cloudflare/OTP проходят успешно.
+   - `poll_interval_min_seconds` / `poll_interval_max_seconds` — bounds of the
+     random interval between checks (default 120–300 sec, i.e. 2–5 minutes).
+     A random interval within this range is picked on every cycle so requests
+     aren't perfectly regular and don't look like scraping to Cloudflare.
+   - `reminder_interval_seconds` — if > 0, the bot will repeat the Telegram
+     notification every N seconds while the slot is still available (useful if
+     you didn't notice the first message right away). Default `0` — notify
+     only when the slot first appears.
+   - `access_denied_backoff_seconds` — how long to pause after VFS hard-blocks
+     with "Access Denied / 429002 Unauthorised Activity" (a rate-limit block).
+     Retrying quickly only extends the block, so the default is 30 minutes.
+   - `headless: false` — it's recommended to keep the browser visible,
+     especially on the first run, until you've confirmed Cloudflare/OTP pass
+     successfully.
 
-## Запуск
+## Running
 
 ```bash
 python -m vfs_bot.main
 ```
 
-При первом запуске бот:
-1. Откроет страницу логина, введёт email/пароль, дождётся прохождения
-   Cloudflare.
-2. На странице OTP подождёт письмо от VFS на вашей почте, заберёт код и
-   введёт его.
-3. После успешного входа сохранит cookies в `storage_state.json` — при
-   следующих запусках повторный логин/OTP не потребуется, пока сессия жива.
-   Cookies также сохраняются после каждого цикла проверки (атомарная запись),
-   так что при аварийном завершении процесса сессия не теряется.
-4. Перейдёт на страницу записи, выберет центр/категорию/подкатегорию и будет
-   проверять наличие слотов с заданным интервалом.
+On the first run, the bot will:
+1. Open the login page, enter the email/password, and wait for Cloudflare to
+   pass.
+2. On the OTP page, wait for VFS's email in your mailbox, grab the code, and
+   enter it.
+3. After a successful login, save cookies to `storage_state.json` — on
+   subsequent runs, no repeated login/OTP is needed while the session is
+   alive. Cookies are also saved after every check cycle (atomic write), so
+   the session isn't lost if the process crashes.
+4. Go to the appointment page, select the centre/category/sub-category, and
+   check for available slots at the configured interval.
 
-## Отладка: видно ли, что делает бот
+## Debugging: seeing what the bot is doing
 
-Есть три способа понять, что происходит:
+There are three ways to understand what's happening:
 
-1. **Логи в консоли.** Бот пишет подробный лог каждого шага логина:
+1. **Console logs.** The bot logs every step of the login flow in detail:
    ```
    Login step: opening login page ...
    Login step: entering email
@@ -95,72 +97,76 @@ python -m vfs_bot.main
    Login step: waiting for redirect to appointment page
    Login successful
    ```
-   Если бот зависнет или упадёт — по последней строке сразу видно, на каком
-   шаге.
+   If the bot hangs or crashes, the last line immediately shows which step it
+   was on.
 
-2. **Скриншоты по шагам** (`vfs.debug_screenshots: true`, включено по
-   умолчанию). На каждом ключевом шаге логина (страница логина, после ввода
-   данных, после Cloudflare, страница OTP, после ввода OTP, успех/провал)
-   сохраняется PNG в папку `vfs.debug_dir` (по умолчанию `debug/`). Это
-   полезно даже без графического интерфейса — папку можно просто скачать и
-   посмотреть.
+2. **Step-by-step screenshots** (`vfs.debug_screenshots: true`, enabled by
+   default). At every key login step (login page, after filling in
+   credentials, after Cloudflare, OTP page, after entering OTP,
+   success/failure) a PNG is saved into `vfs.debug_dir` (default `debug/`).
+   This is useful even without a GUI — you can just download the folder and
+   look at the images.
 
-3. **Telegram-уведомления со скриншотом.**
-   - После успешного входа в Telegram придёт скриншот страницы записи —
-     наглядное подтверждение, что бот действительно зашёл в аккаунт.
-   - Если вход не удался — придёт скриншот того, на чём всё застряло
-     (страница логина/OTP/ошибка Cloudflare).
-   - При любой ошибке во время цикла проверки — тоже скриншот.
+3. **Telegram notifications with screenshots.**
+   - After a successful login, Telegram receives a screenshot of the
+     appointment page — visual confirmation that the bot actually got into the
+     account.
+   - If login fails, you get a screenshot of whatever it got stuck on
+     (login/OTP page, Cloudflare error).
+   - Any error during a check cycle also comes with a screenshot.
 
-Кроме скриншотов, при `headless: false` и доступе к графическому окружению
-(например, X11/VNC на сервере, или запуск на своей машине) можно просто
-смотреть на открытое окно браузера в реальном времени.
+Besides screenshots, with `headless: false` and access to a graphical
+environment (e.g. X11/VNC on a server, or running on your own machine) you can
+simply watch the open browser window in real time.
 
-## Имитация человеческого поведения
+## Human-like behaviour
 
-При логине бот не вставляет email/пароль/OTP мгновенно, а печатает их
-посимвольно со случайными задержками (`vfs_bot/human.py`), очищает поле перед
-вводом, как реальный пользователь, двигает мышь к кнопкам перед кликом и
-делает случайные паузы между шагами. Это снижает вероятность того, что
-Cloudflare Turnstile пометит сессию как автоматизированную по поведенческим
-признакам. Из-за этого логин занимает на 10-20 секунд дольше — это нормально.
+During login, the bot doesn't paste the email/password/OTP instantly —
+instead it types them character by character with randomized delays
+(`vfs_bot/human.py`), clears each field before typing like a real user, moves
+the mouse towards buttons before clicking, and adds random pauses between
+steps. This reduces the chance of Cloudflare Turnstile flagging the session as
+automated based on behavioural signals. Because of this, login takes 10-20
+seconds longer — that's expected.
 
-## Прокси (важно для обхода Cloudflare)
+## Proxy (important for getting past Cloudflare)
 
-Cloudflare почти всегда блокирует доступ к VFS Global с дата-центровых IP
-(VPS, облако, хостинг). Если бот видит страницу с текстом вида *"try again in
-one hour"* или не проходит challenge — почти наверняка дело в IP. Решение —
-**резидентский (residential) или мобильный прокси**.
+Cloudflare almost always blocks access to VFS Global from datacenter IPs (VPS,
+cloud, hosting). If the bot sees a page saying something like *"try again in
+one hour"* or fails the challenge, it's almost certainly an IP issue. The
+solution is a **residential or mobile proxy**.
 
-Настройка: укажите `proxy.server` в `config.yaml` либо `PROXY_SERVER` в `.env`:
+Configuration: set `proxy.server` in `config.yaml` or `PROXY_SERVER` in
+`.env`:
 
 ```yaml
 proxy:
-  server: "http://1.2.3.4:8080"      # или socks5://1.2.3.4:1080
+  server: "http://1.2.3.4:8080"      # or socks5://1.2.3.4:1080
 ```
 
-Логин/пароль прокси — в `.env` (`PROXY_USERNAME` / `PROXY_PASSWORD`), чтобы не
-хранить их в репозитории. Если `server` пустой — бот работает без прокси.
+Proxy credentials go in `.env` (`PROXY_USERNAME` / `PROXY_PASSWORD`) so they
+aren't stored in the repository. If `server` is empty, the bot runs without a
+proxy.
 
-Рекомендации:
-- Берите **residential**, а не datacenter-прокси — последние Cloudflare тоже
-  часто банит.
-- Желательно «липкий» (sticky) IP, который не меняется между логином и
-  опросами, иначе сессия может слетать.
-- IP лучше выбирать в регионе, близком к Сербии/Балканам.
+Recommendations:
+- Use a **residential** proxy, not a datacenter one — Cloudflare blocks the
+  latter too, often aggressively.
+- A **sticky** IP that doesn't change between login and polling is preferable,
+  otherwise the session may get invalidated.
+- Pick an IP region close to Serbia/the Balkans if possible.
 
-## Важно про селекторы
+## A note on selectors
 
-VFS Global периодически меняет вёрстку сайта и усиливает защиту Cloudflare.
-Селекторы в `vfs_bot/client.py` написаны максимально устойчиво (по тексту
-лейблов и ролям кнопок), но если сайт изменится — потребуется поправить
-`client.py`. Полезно запускать с `headless: false` и/или использовать
-`playwright codegen https://visa.vfsglobal.com/srb/en/hrv/login` чтобы
-посмотреть актуальную разметку.
+VFS Global periodically changes its site layout and strengthens Cloudflare
+protection. The selectors in `vfs_bot/client.py` are written to be as robust
+as possible (by label text and button roles), but if the site changes,
+`client.py` will need updating. It helps to run with `headless: false` and/or
+use `playwright codegen https://visa.vfsglobal.com/srb/en/hrv/login` to inspect
+the current markup.
 
-## Безопасность
+## Security
 
-- Не коммитьте `.env`, `config.yaml` и `storage_state.json` — они уже в
-  `.gitignore`.
-- Используйте бота только для проверки доступности слотов на **ваш
-  собственный** аккаунт VFS Global.
+- Don't commit `.env`, `config.yaml`, or `storage_state.json` — they're
+  already in `.gitignore`.
+- Only use this bot to check slot availability for **your own** VFS Global
+  account.
