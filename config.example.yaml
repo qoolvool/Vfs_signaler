@@ -1,9 +1,9 @@
 vfs:
   login_url: "https://visa.vfsglobal.com/srb/en/hrv/login"
   appointment_url: "https://visa.vfsglobal.com/srb/en/hrv/book-appointment"
-  application_centre: "Visa Application Centre, Belgrade"
+  application_centre: "Visa Application Centre,Belgrade"
   category: "C visa"
-  sub_category: "Tourist , Visit , Business"
+  sub_category: "Tourist, Visit , Business"
   poll_interval_min_seconds: 120
   poll_interval_max_seconds: 300
   # If > 0, repeat the Telegram notification every N seconds while the slot
