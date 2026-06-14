@@ -33,7 +33,7 @@ class IMAPConfig:
     host: str
     port: int = 993
     folder: str = "INBOX"
-    sender_filter: str = "vfsglobal"
+    sender_filter: str = "vfshelpline.com"
     otp_regex: str = r"\b(\d{4,8})\b"
     poll_timeout_seconds: int = 120
     poll_interval_seconds: int = 5
