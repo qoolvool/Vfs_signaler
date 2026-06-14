@@ -363,19 +363,36 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
-        self._select_dropdown("Choose your Application Centre", vfs.application_centre)
+        self._select_dropdown("Choose your Application Centre", vfs.application_centre, "centerCode")
         random_delay(300, 800)
-        self._select_dropdown("Choose your appointment category", vfs.category)
+        self._select_dropdown("Choose your appointment category", vfs.category, "selectedSubvisaCategory")
         random_delay(300, 800)
-        self._select_dropdown("Choose your sub-category", vfs.sub_category)
+        self._select_dropdown("Choose your sub-category", vfs.sub_category, "visaCategoryCode")
 
         page.wait_for_timeout(2000)
 
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
         return no_slots.count() == 0
 
-    def _select_dropdown(self, label_text: str, value: str) -> None:
+    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str | None = None) -> None:
         page = self.page
+
+        # 0) Direct match via Angular's formcontrolname attribute. This is the
+        # most reliable option: VFS's mat-select labels often have `for`/
+        # `aria-labelledby` attributes that don't actually point at the right
+        # control, so text-based lookups below can grab the wrong dropdown.
+        if formcontrolname:
+            trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
+            try:
+                trigger.wait_for(state="visible", timeout=5000)
+                self._select_custom_dropdown(trigger, value)
+                return
+            except Exception:
+                logger.exception(
+                    "Failed to select '%s' via formcontrolname='%s', falling back",
+                    label_text,
+                    formcontrolname,
+                )
 
         # 1) Native <select> associated with the label via aria/for
         try:
@@ -408,16 +425,16 @@ class VFSClient:
 
         # 3) Custom (non-native) dropdown widget: click to open it, then
         # click the matching option from the list that appears.
-        self._select_custom_dropdown(container, value)
-
-    def _select_custom_dropdown(self, container: Locator, value: str) -> None:
-        page = self.page
-
         trigger = container.locator(
             "[role='combobox'], [role='listbox'], "
             "input[readonly], .dropdown, .select, button"
         ).first
         trigger.wait_for(state="visible", timeout=5000)
+        self._select_custom_dropdown(trigger, value)
+
+    def _select_custom_dropdown(self, trigger: Locator, value: str) -> None:
+        page = self.page
+
         human_click(page, trigger)
 
         try:
