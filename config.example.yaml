@@ -4,8 +4,8 @@ vfs:
   application_centre: "Visa Application Centre,Belgrade"
   category: "C visa"
   sub_category: "Tourist, Visit , Business"
-  poll_interval_min_seconds: 120
-  poll_interval_max_seconds: 300
+  poll_interval_min_seconds: 600
+  poll_interval_max_seconds: 900
   # If > 0, repeat the Telegram notification every N seconds while the slot
   # remains available (in addition to the first one). 0 = notify only once
   # per appearance.

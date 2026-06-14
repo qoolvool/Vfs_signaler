@@ -42,6 +42,14 @@ REQUEST_TIMEOUT_PATTERNS = (
     re.compile(r"\(504\)"),
 )
 
+# VFS locks the account/session for a while after too many requests. Unlike
+# ACCESS_DENIED_PATTERNS (Cloudflare-level block), this is account-level and
+# the page itself says access resets after a couple of hours.
+ACCOUNT_LOCKED_PATTERNS = (
+    re.compile(r"account locked", re.I),
+    re.compile(r"429202"),
+)
+
 
 class AccessDeniedError(RuntimeError):
     """Raised when VFS/Cloudflare returns a hard block page."""
@@ -49,6 +57,10 @@ class AccessDeniedError(RuntimeError):
 
 class RequestTimedOutError(RuntimeError):
     """Raised when VFS returns a 'Request Timed Out (504)' error page."""
+
+
+class AccountLockedError(RuntimeError):
+    """Raised when VFS returns an 'Account Locked (429202)' page."""
 
 
 class VFSClient:
@@ -68,6 +80,7 @@ class VFSClient:
         self.page.goto(self.config.vfs.appointment_url, wait_until="domcontentloaded")
         self.check_access_denied()
         self.check_request_timeout()
+        self.check_account_locked()
         self._accept_cookies()
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
@@ -101,6 +114,19 @@ class VFSClient:
                     f"VFS returned a Request Timed Out (504) page (matched: {pattern.pattern!r})"
                 )
 
+    def check_account_locked(self) -> None:
+        """Raises AccountLockedError if VFS returned an 'Account Locked
+        (429202)' page."""
+        try:
+            content = self.page.content()
+        except Exception:
+            return
+        for pattern in ACCOUNT_LOCKED_PATTERNS:
+            if pattern.search(content):
+                raise AccountLockedError(
+                    f"VFS returned an Account Locked (429202) page (matched: {pattern.pattern!r})"
+                )
+
     # ------------------------------------------------------------------
     # Login + OTP flow
     # ------------------------------------------------------------------
@@ -113,6 +139,7 @@ class VFSClient:
         random_delay(500, 1500)
         self.check_access_denied()
         self.check_request_timeout()
+        self.check_account_locked()
         self._accept_cookies()
         self._step_screenshot("01_login_page")
 
@@ -146,6 +173,7 @@ class VFSClient:
         self._click_sign_in()
         self.check_access_denied()
         self.check_request_timeout()
+        self.check_account_locked()
 
         logger.info("Login step: waiting for OTP input field")
         otp_input = self._first_visible(
@@ -173,6 +201,7 @@ class VFSClient:
         self._click_sign_in()
         self.check_access_denied()
         self.check_request_timeout()
+        self.check_account_locked()
 
         logger.info("Login step: clicking 'Start New Booking'")
         self._click_first(

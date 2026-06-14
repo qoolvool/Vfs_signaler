@@ -4,7 +4,7 @@ import sys
 import time
 
 from .browser import BrowserSession
-from .client import AccessDeniedError, RequestTimedOutError, VFSClient
+from .client import AccessDeniedError, AccountLockedError, RequestTimedOutError, VFSClient
 from .config import load_config
 from .mailbox import OTPMailbox
 from .notifier import TelegramNotifier
@@ -32,7 +32,7 @@ def run(config_path: str = "config.yaml") -> None:
                     notifier.send("VFS bot: требуется вход в аккаунт...")
                     try:
                         client.login()
-                    except (AccessDeniedError, RequestTimedOutError):
+                    except (AccessDeniedError, RequestTimedOutError, AccountLockedError):
                         raise
                     except Exception:
                         logger.exception("Login failed")
@@ -95,6 +95,23 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after access-denied", backoff)
+                time.sleep(backoff)
+                continue
+            except AccountLockedError:
+                logger.exception("VFS returned an Account Locked (429202) page")
+                shot = client.save_debug_screenshot("account_locked")
+                already_notified = False
+                last_notified_at = None
+                backoff = 1800
+                msg = (
+                    "VFS bot: аккаунт временно заблокирован (Account Locked / "
+                    "429202). Жду 30 минут и пробую снова."
+                )
+                if shot:
+                    notifier.send_photo(shot, msg)
+                else:
+                    notifier.send(msg)
+                logger.info("Backing off for %d seconds after account-locked", backoff)
                 time.sleep(backoff)
                 continue
             except RequestTimedOutError:
