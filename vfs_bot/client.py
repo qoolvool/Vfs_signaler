@@ -388,18 +388,29 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
+        logger.info("Appointment form: selecting Application Centre = '%s'", vfs.application_centre)
         self._select_dropdown("Choose your Application Centre", vfs.application_centre, "centerCode")
+        self._step_screenshot("10_after_centre")
         random_delay(300, 800)
+
+        logger.info("Appointment form: selecting category = '%s'", vfs.category)
         self._select_dropdown("Choose your appointment category", vfs.category, "selectedSubvisaCategory")
+        self._step_screenshot("11_after_category")
         # The sub-category options are loaded by VFS only after a category is
         # selected, so give the page time to populate them before we try.
         page.wait_for_timeout(1500)
+
+        logger.info("Appointment form: selecting sub-category = '%s'", vfs.sub_category)
         self._select_dropdown("Choose your sub-category", vfs.sub_category, "visaCategoryCode")
+        self._step_screenshot("12_after_subcategory")
 
         page.wait_for_timeout(2000)
+        self._step_screenshot("13_final_form_state")
 
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
-        return no_slots.count() == 0
+        count = no_slots.count()
+        logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
+        return count == 0
 
     def _select_dropdown(self, label_text: str, value: str, formcontrolname: str | None = None) -> None:
         page = self.page
@@ -413,6 +424,16 @@ class VFSClient:
             for attempt in range(2):
                 try:
                     trigger.wait_for(state="visible", timeout=8000)
+                    try:
+                        logger.info(
+                            "Dropdown '%s' (formcontrolname='%s') current text: '%s', classes: '%s'",
+                            label_text,
+                            formcontrolname,
+                            trigger.inner_text(),
+                            trigger.get_attribute("class"),
+                        )
+                    except Exception:
+                        logger.exception("Could not read current state of '%s'", label_text)
                     self._select_custom_dropdown(trigger, value)
                     return
                 except Exception:
@@ -489,20 +510,33 @@ class VFSClient:
         # value we picked before giving up.
         for attempt in range(3):
             try:
+                logger.info("Attempt %d: clicking dropdown trigger to select '%s'", attempt + 1, value)
                 human_click(page, trigger)
+                page.wait_for_timeout(300)
 
                 try:
                     option = page.get_by_role("option", name=value, exact=False).first
                     option.wait_for(state="visible", timeout=5000)
+                    logger.info("Found option for '%s' via role='option'", value)
                 except PlaywrightTimeoutError:
+                    logger.info(
+                        "No role='option' match for '%s', trying get_by_text", value
+                    )
+                    try:
+                        all_options = page.get_by_role("option").all_inner_texts()
+                        logger.info("Visible options in panel: %r", all_options)
+                    except Exception:
+                        logger.exception("Could not list visible options")
                     option = page.get_by_text(value, exact=False).last
                     option.wait_for(state="visible", timeout=3000)
+                    logger.info("Found option for '%s' via get_by_text", value)
 
                 human_click(page, option)
                 page.wait_for_timeout(1000)
 
                 current = self._normalize_text(trigger.inner_text())
                 if current == self._normalize_text(value):
+                    logger.info("'%s' successfully selected", value)
                     return
                 logger.warning(
                     "'%s' not reflected after selection (got '%s'), retrying",
