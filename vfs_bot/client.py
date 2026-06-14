@@ -144,7 +144,22 @@ class VFSClient:
         self._click_sign_in()
 
         logger.info("Login step: waiting for redirect to appointment page")
-        page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
+        try:
+            page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=15000)
+        except PlaywrightTimeoutError:
+            logger.info(
+                "Login step: not on appointment page yet, clicking 'Start New Booking'"
+            )
+            self._click_first(
+                [
+                    lambda: page.locator("button:has-text('Start New Booking'):visible"),
+                    lambda: page.get_by_role(
+                        "button", name=re.compile("start new booking", re.I)
+                    ),
+                ]
+            )
+            page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
+
         self._step_screenshot("06_login_success")
         logger.info("Login successful")
 
