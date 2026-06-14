@@ -34,9 +34,21 @@ ACCESS_DENIED_PATTERNS = (
     re.compile(r"error\s*1020", re.I),
 )
 
+# VFS occasionally returns a "Request Timed Out (504)" error page (its own
+# gateway timing out, not an anti-bot block). This is transient — the usual
+# fix is to back off for a while and retry from scratch.
+REQUEST_TIMEOUT_PATTERNS = (
+    re.compile(r"request timed out", re.I),
+    re.compile(r"\(504\)"),
+)
+
 
 class AccessDeniedError(RuntimeError):
     """Raised when VFS/Cloudflare returns a hard block page."""
+
+
+class RequestTimedOutError(RuntimeError):
+    """Raised when VFS returns a 'Request Timed Out (504)' error page."""
 
 
 class VFSClient:
@@ -55,6 +67,7 @@ class VFSClient:
         False if the site redirected to the login page."""
         self.page.goto(self.config.vfs.appointment_url, wait_until="domcontentloaded")
         self.check_access_denied()
+        self.check_request_timeout()
         self._accept_cookies()
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
@@ -75,6 +88,19 @@ class VFSClient:
                     f"VFS/Cloudflare returned a block page (matched: {pattern.pattern!r})"
                 )
 
+    def check_request_timeout(self) -> None:
+        """Raises RequestTimedOutError if VFS returned a 'Request Timed Out
+        (504)' error page."""
+        try:
+            content = self.page.content()
+        except Exception:
+            return
+        for pattern in REQUEST_TIMEOUT_PATTERNS:
+            if pattern.search(content):
+                raise RequestTimedOutError(
+                    f"VFS returned a Request Timed Out (504) page (matched: {pattern.pattern!r})"
+                )
+
     # ------------------------------------------------------------------
     # Login + OTP flow
     # ------------------------------------------------------------------
@@ -86,6 +112,7 @@ class VFSClient:
         page.goto(vfs.login_url, wait_until="domcontentloaded")
         random_delay(500, 1500)
         self.check_access_denied()
+        self.check_request_timeout()
         self._accept_cookies()
         self._step_screenshot("01_login_page")
 
@@ -117,6 +144,8 @@ class VFSClient:
         logger.info("Login step: clicking Sign In (credentials)")
         request_time = time.time()
         self._click_sign_in()
+        self.check_access_denied()
+        self.check_request_timeout()
 
         logger.info("Login step: waiting for OTP input field")
         otp_input = self._first_visible(
@@ -142,6 +171,8 @@ class VFSClient:
 
         logger.info("Login step: clicking Sign In (OTP)")
         self._click_sign_in()
+        self.check_access_denied()
+        self.check_request_timeout()
 
         logger.info("Login step: waiting for redirect to appointment page")
         try:

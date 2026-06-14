@@ -4,7 +4,7 @@ import sys
 import time
 
 from .browser import BrowserSession
-from .client import AccessDeniedError, VFSClient
+from .client import AccessDeniedError, RequestTimedOutError, VFSClient
 from .config import load_config
 from .mailbox import OTPMailbox
 from .notifier import TelegramNotifier
@@ -32,6 +32,8 @@ def run(config_path: str = "config.yaml") -> None:
                     notifier.send("VFS bot: требуется вход в аккаунт...")
                     try:
                         client.login()
+                    except (AccessDeniedError, RequestTimedOutError):
+                        raise
                     except Exception:
                         logger.exception("Login failed")
                         shot = client.save_debug_screenshot("login_failed")
@@ -93,6 +95,23 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after access-denied", backoff)
+                time.sleep(backoff)
+                continue
+            except RequestTimedOutError:
+                logger.exception("VFS returned a Request Timed Out (504) page")
+                shot = client.save_debug_screenshot("request_timed_out")
+                already_notified = False
+                last_notified_at = None
+                backoff = 600
+                msg = (
+                    "VFS bot: сайт ответил 'Request Timed Out (504)'. "
+                    "Прерываю текущую попытку, жду 10 минут и пробую снова."
+                )
+                if shot:
+                    notifier.send_photo(shot, msg)
+                else:
+                    notifier.send(msg)
+                logger.info("Backing off for %d seconds after a 504 timeout", backoff)
                 time.sleep(backoff)
                 continue
             except Exception:
