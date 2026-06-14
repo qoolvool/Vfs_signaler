@@ -12,10 +12,13 @@ from .config import IMAPConfig
 logger = logging.getLogger(__name__)
 
 # Prefer a number that sits right after an OTP-related keyword; this avoids
-# grabbing unrelated digits (tracking ids, years, CSS values) from HTML emails.
+# grabbing unrelated digits (tracking ids, years, CSS values, phone numbers)
+# from HTML emails. The window is generous (80 chars) because real-world VFS
+# wording like "The OTP for your application with VFS Global is 453093" puts
+# 40+ characters between the keyword and the code.
 OTP_KEYWORD_REGEX = re.compile(
     r"(?:one[\s-]*time[\s-]*password|otp|verification\s+code|"
-    r"security\s+code|password|code)\D{0,40}?(\d{4,8})",
+    r"security\s+code|password|code)\D{0,80}?(\d{4,8})",
     re.IGNORECASE,
 )
 
