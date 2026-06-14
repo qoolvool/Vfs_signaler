@@ -174,22 +174,16 @@ class VFSClient:
         self.check_access_denied()
         self.check_request_timeout()
 
-        logger.info("Login step: waiting for redirect to appointment page")
-        try:
-            page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=15000)
-        except PlaywrightTimeoutError:
-            logger.info(
-                "Login step: not on appointment page yet, clicking 'Start New Booking'"
-            )
-            self._click_first(
-                [
-                    lambda: page.locator("button:has-text('Start New Booking'):visible"),
-                    lambda: page.get_by_role(
-                        "button", name=re.compile("start new booking", re.I)
-                    ),
-                ]
-            )
-            page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
+        logger.info("Login step: clicking 'Start New Booking'")
+        self._click_first(
+            [
+                lambda: page.locator("button:has-text('Start New Booking'):visible"),
+                lambda: page.get_by_role(
+                    "button", name=re.compile("start new booking", re.I)
+                ),
+            ]
+        )
+        page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
 
         self._step_screenshot("06_login_success")
         logger.info("Login successful")
@@ -466,6 +460,17 @@ class VFSClient:
     def _select_custom_dropdown(self, trigger: Locator, value: str) -> None:
         page = self.page
 
+        # The appointment form sometimes pre-selects a value automatically
+        # (e.g. when only one application centre is available). If the
+        # trigger already shows the value we want, there's nothing to do.
+        try:
+            current = self._normalize_text(trigger.inner_text())
+            if current == self._normalize_text(value):
+                logger.info("'%s' is already selected, skipping", value)
+                return
+        except Exception:
+            pass
+
         human_click(page, trigger)
 
         try:
@@ -481,6 +486,10 @@ class VFSClient:
     # ------------------------------------------------------------------
     # Locator helpers
     # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip().lower()
+
     @staticmethod
     def _first_visible(candidates, timeout: int = 30000) -> Locator:
         last_error: Exception | None = None
