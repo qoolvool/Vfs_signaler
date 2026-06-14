@@ -100,12 +100,13 @@ def run(config_path: str = "config.yaml") -> None:
             except AccountLockedError:
                 logger.exception("VFS returned an Account Locked (429202) page")
                 shot = client.save_debug_screenshot("account_locked")
+                session.clear_state()
                 already_notified = False
                 last_notified_at = None
                 backoff = 1800
                 msg = (
                     "VFS bot: аккаунт временно заблокирован (Account Locked / "
-                    "429202). Жду 30 минут и пробую снова."
+                    "429202). Куки сброшены, жду 30 минут и пробую снова."
                 )
                 if shot:
                     notifier.send_photo(shot, msg)
