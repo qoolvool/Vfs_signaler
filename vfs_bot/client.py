@@ -201,7 +201,7 @@ class VFSClient:
             pass
 
         deadline = time.time() + timeout / 1000
-        next_click_at = time.time() + 6  # give it time to auto-pass first
+        next_click_at = time.time() + 2  # give it a brief moment to auto-pass first
         while time.time() < deadline:
             if self._cloudflare_passed():
                 logger.info("Cloudflare challenge passed")
@@ -211,8 +211,8 @@ class VFSClient:
             # widget iframe may only appear after a short delay).
             if time.time() >= next_click_at:
                 self._click_turnstile_checkbox()
-                next_click_at = time.time() + 8
-            page.wait_for_timeout(1000)
+                next_click_at = time.time() + 3
+            page.wait_for_timeout(500)
 
         logger.warning("Cloudflare pass not confirmed within timeout, continuing anyway")
 
@@ -275,6 +275,13 @@ class VFSClient:
         was issued. Non-fatal on failure."""
         page = self.page
 
+        # Prefer clicking the actual checkbox label inside the challenge
+        # iframe — this hits the real element directly instead of guessing
+        # coordinates from the outer iframe's bounding box, which is faster
+        # and more reliable.
+        if self._click_turnstile_in_frame():
+            return True
+
         box = None
         matched = None
         for selector in self.TURNSTILE_SELECTORS:
@@ -295,8 +302,7 @@ class VFSClient:
 
         if not box:
             logger.info("No Cloudflare Turnstile widget found to click yet")
-            # Last resort: try clicking the checkbox directly inside the iframe.
-            return self._click_turnstile_in_frame()
+            return False
 
         # The checkbox sits near the left edge of the widget, vertically
         # centred. Aim for that area with a little jitter.
@@ -314,8 +320,8 @@ class VFSClient:
             return False
 
     def _click_turnstile_in_frame(self) -> bool:
-        """Fallback: click the checkbox element inside the Turnstile iframe via
-        a frame locator (Playwright can reach cross-origin frames)."""
+        """Click the checkbox element inside the Turnstile iframe via a frame
+        locator (Playwright can reach cross-origin frames)."""
         page = self.page
         try:
             frame = page.frame_locator(
@@ -323,7 +329,7 @@ class VFSClient:
                 "iframe[title*='Cloudflare' i], iframe[title*='challenge' i]"
             )
             checkbox = frame.locator(
-                "input[type='checkbox'], label, .cb-c, #challenge-stage"
+                "label.cb-lb, .cb-i, input[type='checkbox'], .cb-c, #challenge-stage"
             ).first
             checkbox.click(timeout=3000)
             logger.info("Clicked Turnstile checkbox inside iframe")
