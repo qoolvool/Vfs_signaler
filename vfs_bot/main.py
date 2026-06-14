@@ -103,10 +103,10 @@ def run(config_path: str = "config.yaml") -> None:
                 session.clear_state()
                 already_notified = False
                 last_notified_at = None
-                backoff = 1800
+                backoff = 7200
                 msg = (
                     "VFS bot: аккаунт временно заблокирован (Account Locked / "
-                    "429202). Куки сброшены, жду 30 минут и пробую снова."
+                    "429202). Куки сброшены, жду 2 часа и пробую снова."
                 )
                 if shot:
                     notifier.send_photo(shot, msg)
