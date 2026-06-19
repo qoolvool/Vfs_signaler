@@ -32,6 +32,11 @@ def run(config_path: str = "config.yaml") -> None:
 
         already_notified = False
         last_notified_at: float | None = None
+        # Counts blocks that happen back-to-back. Each consecutive block makes
+        # the recoverable backoffs (Access Denied / 504) progressively longer so
+        # the bot stops hammering VFS when it's clearly being rate-limited. A
+        # clean check resets it to 0.
+        consecutive_blocks = 0
         while True:
             try:
                 if not client.open_appointments():
@@ -60,7 +65,11 @@ def run(config_path: str = "config.yaml") -> None:
                     # reload the page and lose the session.
                     session.save_state()
 
-                if client.has_available_slot():
+                slot_available = client.has_available_slot()
+                # We reached and read the appointment page without a block, so
+                # whatever rate-limit streak we had is over.
+                consecutive_blocks = 0
+                if slot_available:
                     reminder = config.vfs.reminder_interval_seconds
                     due_for_reminder = (
                         already_notified
@@ -94,7 +103,9 @@ def run(config_path: str = "config.yaml") -> None:
                 client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
-                backoff = config.vfs.access_denied_backoff_seconds
+                consecutive_blocks += 1
+                # Progressive backoff: 1x, 2x, 3x... the base, capped at 4x.
+                backoff = config.vfs.access_denied_backoff_seconds * min(consecutive_blocks, 4)
                 minutes = max(backoff // 60, 1)
                 msg = (
                     "VFS bot: доступ заблокирован (Access Denied / 429002 — "
@@ -115,6 +126,7 @@ def run(config_path: str = "config.yaml") -> None:
                 client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
+                consecutive_blocks += 1
                 backoff = 7200
                 msg = (
                     "VFS bot: аккаунт временно заблокирован (Account Locked / "
@@ -134,6 +146,7 @@ def run(config_path: str = "config.yaml") -> None:
                 client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
+                consecutive_blocks += 1
                 msg = (
                     "VFS bot: сессия истекла (Session Expired or Invalid). "
                     "Куки сброшены, пробую войти заново."
@@ -150,7 +163,8 @@ def run(config_path: str = "config.yaml") -> None:
                 client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
-                backoff = 600
+                consecutive_blocks += 1
+                backoff = 600 * min(consecutive_blocks, 3)
                 msg = (
                     "VFS bot: сайт ответил 'Request Timed Out (504)'. "
                     "Прерываю текущую попытку, жду 10 минут и пробую снова."
