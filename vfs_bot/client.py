@@ -174,20 +174,31 @@ class VFSClient:
         logger.info("Login step: clicking Sign In (credentials)")
         request_time = time.time()
         self._click_sign_in()
+        page.wait_for_timeout(3000)
+        self._step_screenshot("03b_after_sign_in",
+                              "VFS bot: после нажатия Sign In (логин/пароль)")
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
 
         logger.info("Login step: waiting for OTP input field")
-        otp_input = self._first_visible(
-            [
-                lambda: page.locator("input[formcontrolname='otp']"),
-                lambda: page.locator("input[name='otp']"),
-                lambda: page.get_by_label(re.compile("one time password", re.I)),
-                lambda: page.get_by_placeholder(re.compile("OTP", re.I)),
-            ],
-            timeout=60000,
-        )
+        try:
+            otp_input = self._first_visible(
+                [
+                    lambda: page.locator("input[formcontrolname='otp']"),
+                    lambda: page.locator("input[name='otp']"),
+                    lambda: page.get_by_label(re.compile("one time password", re.I)),
+                    lambda: page.get_by_placeholder(re.compile("OTP", re.I)),
+                ],
+                timeout=60000,
+            )
+        except PlaywrightTimeoutError:
+            self._step_screenshot("03c_otp_not_found",
+                                  "VFS bot: поле OTP не найдено. Скриншот текущей страницы.")
+            self.check_access_denied()
+            self.check_request_timeout()
+            self.check_account_locked()
+            raise
         self._step_screenshot("04_otp_page")
 
         logger.info("Login step: waiting for OTP email")
