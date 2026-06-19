@@ -488,12 +488,9 @@ class VFSClient:
                 step, label, keyword, fcn,
             )
             result = self._select_dropdown(label, keyword, fcn)
-            self._step_screenshot(
-                f"10_dropdown_{step}",
-                f"Dropdown {step}/3: {label}\n"
-                f"Ключевое слово: {keyword}\n"
-                f"Результат: {result}",
-            )
+            logger.info("Dropdown %d/3 result: %s", step, result)
+            # Local screenshot only — no Telegram spam per dropdown.
+            self._step_screenshot(f"10_dropdown_{step}")
 
         # Give the page a moment to render the slot-availability message after
         # the last dropdown selection settles.
@@ -504,18 +501,55 @@ class VFSClient:
         available = count == 0
         logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
 
-        if available:
-            status = (
-                "✅ Похоже, слоты ДОСТУПНЫ! Сообщение 'нет слотов' на странице "
-                "не найдено."
-            )
+        # The single Telegram notification per check: the actual message the
+        # page shows after all dropdowns are selected, plus a screenshot.
+        message = self._read_slot_message()
+        if message:
+            prefix = "✅ ЕСТЬ СЛОТ!" if available else "❌ Слотов нет."
+            caption = f"VFS bot: {prefix}\n\nТекст со страницы:\n{message}"
         else:
-            status = "❌ Слотов нет ('no appointment slots are currently available')."
-        self._step_screenshot(
-            "20_slot_status",
-            f"VFS bot: результат проверки слотов.\n{status}",
-        )
+            # No result text found at all — surface a warning so we notice.
+            caption = (
+                "⚠️ VFS bot: не нашёл текст с результатом проверки на странице. "
+                "Возможно, форма не догрузилась или изменилась. См. скриншот."
+            )
+        self._notify_result("20_slot_status", caption)
         return available
+
+    def _read_slot_message(self) -> str | None:
+        """Returns the text VFS shows after all dropdowns are selected (the
+        slot-availability message), or None if no such text is found."""
+        page = self.page
+
+        # 1) The known 'no slots' phrase — grab the full element text so the
+        # notification shows VFS's exact wording.
+        try:
+            no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
+            if no_slots.count() > 0:
+                text = no_slots.first.inner_text().strip()
+                if text:
+                    return text
+        except Exception:
+            pass
+
+        # 2) Common containers VFS uses for availability/alert messages.
+        candidates = [
+            "[role='alert']",
+            ".alert, .alert-info, .alert-warning, .alert-success",
+            ".availability-message, .slot-message, .info-message",
+            "mat-hint, mat-error",
+        ]
+        for selector in candidates:
+            try:
+                loc = page.locator(selector)
+                if loc.count() > 0:
+                    text = loc.first.inner_text().strip()
+                    if text:
+                        return text
+            except Exception:
+                continue
+
+        return None
 
     def _select_dropdown(self, label_text: str, keyword: str, formcontrolname: str) -> str:
         """Selects the option containing `keyword` (case-insensitive) in the
@@ -677,3 +711,14 @@ class VFSClient:
             logger.info("Saved debug screenshot: %s", path)
             if telegram_caption and self.notifier:
                 self.notifier.send_photo(path, telegram_caption)
+
+    def _notify_result(self, name: str, caption: str) -> None:
+        """Sends a check-result screenshot + caption to Telegram. Unlike
+        `_step_screenshot`, this always fires (not gated by debug_screenshots)
+        because reporting the check outcome is a core feature."""
+        path = self.save_debug_screenshot(name)
+        if self.notifier:
+            if path:
+                self.notifier.send_photo(path, caption)
+            else:
+                self.notifier.send(caption)

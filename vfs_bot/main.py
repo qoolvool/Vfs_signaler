@@ -65,37 +65,13 @@ def run(config_path: str = "config.yaml") -> None:
                     # reload the page and lose the session.
                     session.save_state()
 
-                slot_available = client.has_available_slot()
+                # has_available_slot() itself sends the per-check result to
+                # Telegram (page text + screenshot, or a warning if no text),
+                # so we don't post any extra slot messages here.
+                client.has_available_slot()
                 # We reached and read the appointment page without a block, so
                 # whatever rate-limit streak we had is over.
                 consecutive_blocks = 0
-                if slot_available:
-                    reminder = config.vfs.reminder_interval_seconds
-                    due_for_reminder = (
-                        already_notified
-                        and reminder > 0
-                        and last_notified_at is not None
-                        and time.time() - last_notified_at >= reminder
-                    )
-                    if not already_notified or due_for_reminder:
-                        notifier.send(
-                            "VFS bot: появился свободный слот для "
-                            f"{config.vfs.application_centre} / "
-                            f"{config.vfs.category} / {config.vfs.sub_category}! "
-                            "Зайдите на сайт и забронируйте его."
-                        )
-                        already_notified = True
-                        last_notified_at = time.time()
-                else:
-                    if already_notified:
-                        notifier.send(
-                            "VFS bot: слот для "
-                            f"{config.vfs.application_centre} / "
-                            f"{config.vfs.category} / {config.vfs.sub_category} "
-                            "больше недоступен."
-                        )
-                    already_notified = False
-                    last_notified_at = None
             except AccessDeniedError:
                 logger.exception("VFS/Cloudflare returned an access-denied page")
                 shot = client.save_debug_screenshot("access_denied")
