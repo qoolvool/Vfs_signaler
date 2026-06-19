@@ -54,7 +54,10 @@ def run(config_path: str = "config.yaml") -> None:
                         notifier.send_photo(shot, "VFS bot: вход выполнен успешно.")
                     else:
                         notifier.send("VFS bot: вход выполнен успешно.")
-                    client.open_appointments()
+                    # login() already navigated to the appointment form
+                    # (clicked "Start New Booking" and waited for it).
+                    # Do NOT call open_appointments() here — that would
+                    # reload the page and lose the session.
                     session.save_state()
 
                 if client.has_available_slot():
