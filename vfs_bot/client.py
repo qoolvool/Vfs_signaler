@@ -473,20 +473,10 @@ class VFSClient:
     def _select_custom_dropdown(self, trigger: Locator, value: str) -> None:
         """Clicks the mat-select to open its options panel, then picks the
         option whose text best matches `value` from the options actually
-        offered, instead of assuming `value` is present verbatim."""
+        offered. Always clicks through — even if the value appears pre-filled,
+        Angular only registers the selection after a real click."""
         page = self.page
         target = self._normalize_text(value)
-
-        # The appointment form sometimes pre-selects a value automatically
-        # (e.g. when only one application centre is available). If the
-        # trigger already shows the value we want, there's nothing to do.
-        try:
-            current = self._normalize_text(trigger.inner_text())
-            if current == target:
-                logger.info("'%s' is already selected, skipping", value)
-                return
-        except Exception:
-            pass
 
         for attempt in range(3):
             try:
