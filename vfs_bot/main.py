@@ -6,6 +6,7 @@ import time
 from .browser import BrowserSession
 from .client import (
     AccessDeniedError,
+    AccessRestrictedError,
     AccountLockedError,
     RequestTimedOutError,
     SessionExpiredError,
@@ -44,7 +45,8 @@ def run(config_path: str = "config.yaml") -> None:
                     try:
                         client.login()
                     except (AccessDeniedError, RequestTimedOutError,
-                            AccountLockedError, SessionExpiredError):
+                            AccountLockedError, SessionExpiredError,
+                            AccessRestrictedError):
                         raise
                     except Exception:
                         logger.exception("Login failed")
@@ -113,6 +115,27 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after account-locked", backoff)
+                time.sleep(backoff)
+                continue
+            except AccessRestrictedError:
+                logger.exception("VFS returned an Access Restricted (429001) page")
+                shot = client.save_debug_screenshot("access_restricted")
+                session.clear_state()
+                client.navigate_to_login()
+                already_notified = False
+                last_notified_at = None
+                consecutive_blocks += 1
+                backoff = 7200
+                msg = (
+                    "VFS bot: доступ к user ID ограничен (Access Restricted / "
+                    "429001 — необычная активность). Куки сброшены, жду 2 часа "
+                    "и пробую снова."
+                )
+                if shot:
+                    notifier.send_photo(shot, msg)
+                else:
+                    notifier.send(msg)
+                logger.info("Backing off for %d seconds after access-restricted", backoff)
                 time.sleep(backoff)
                 continue
             except SessionExpiredError:
