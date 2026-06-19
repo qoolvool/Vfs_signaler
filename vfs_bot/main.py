@@ -20,7 +20,7 @@ def run(config_path: str = "config.yaml") -> None:
 
     with BrowserSession(config.vfs, config.proxy) as session:
         page = session.new_page()
-        client = VFSClient(page, config, mailbox)
+        client = VFSClient(page, config, mailbox, notifier)
 
         notifier.send("VFS bot: мониторинг слотов запущен.")
 

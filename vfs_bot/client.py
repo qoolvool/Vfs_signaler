@@ -16,6 +16,7 @@ from .human import (
     random_delay,
 )
 from .mailbox import OTPMailbox
+from .notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,12 @@ class AccountLockedError(RuntimeError):
 class VFSClient:
     """Drives the VFS Global Croatia (Belgrade) appointment booking site."""
 
-    def __init__(self, page: Page, config: AppConfig, mailbox: OTPMailbox):
+    def __init__(self, page: Page, config: AppConfig, mailbox: OTPMailbox,
+                 notifier: TelegramNotifier | None = None):
         self.page = page
         self.config = config
         self.mailbox = mailbox
+        self.notifier = notifier
 
     # ------------------------------------------------------------------
     # Session state
@@ -424,41 +427,37 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
-        logger.info("Appointment form: selecting Application Centre = '%s'", vfs.application_centre)
-        self._select_dropdown("Choose your Application Centre", vfs.application_centre, "centerCode")
-        self._step_screenshot("10_after_centre")
+        dropdowns = [
+            ("Application Centre", vfs.application_centre, "centerCode"),
+            ("Appointment category", vfs.category, "selectedSubvisaCategory"),
+            ("Sub-category", vfs.sub_category, "visaCategoryCode"),
+        ]
 
-        logger.info("Appointment form: selecting category = '%s'", vfs.category)
-        self._select_dropdown("Choose your appointment category", vfs.category, "selectedSubvisaCategory")
-        self._step_screenshot("11_after_category")
-
-        logger.info("Appointment form: selecting sub-category = '%s'", vfs.sub_category)
-        self._select_dropdown("Choose your sub-category", vfs.sub_category, "visaCategoryCode")
-        self._step_screenshot("12_after_subcategory")
-
-        page.wait_for_timeout(3000)
-        self._step_screenshot("13_final_form_state")
+        for step, (label, value, fcn) in enumerate(dropdowns, start=1):
+            logger.info("Dropdown %d/3: %s → '%s' (formcontrolname='%s')", step, label, value, fcn)
+            result = self._select_dropdown(label, value, fcn)
+            self._step_screenshot(
+                f"10_dropdown_{step}",
+                f"Dropdown {step}/3: {label}\n"
+                f"Целевое значение: {value}\n"
+                f"Результат: {result}",
+            )
 
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
         count = no_slots.count()
         logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
         return count == 0
 
-    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str) -> None:
+    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str) -> str:
         """Selects `value` in the mat-select identified by `formcontrolname`.
-
-        VFS's mat-select labels often have `for`/`aria-labelledby` attributes
-        that don't actually point at the right control, so we go straight to
-        the Angular form control instead of relying on label text.
-        """
+        Returns a human-readable string describing the result."""
         page = self.page
 
         trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
         for attempt in range(2):
             try:
                 trigger.wait_for(state="visible", timeout=8000)
-                self._select_custom_dropdown(trigger, value)
-                return
+                return self._select_custom_dropdown(trigger, value)
             except Exception:
                 logger.exception(
                     "Attempt %d: failed to select '%s' (formcontrolname='%s')",
@@ -469,11 +468,12 @@ class VFSClient:
                 page.wait_for_timeout(1500)
 
         logger.warning("Giving up on dropdown '%s'", label_text)
+        return f"ОШИБКА: не удалось выбрать '{value}' после 2 попыток"
 
-    def _select_custom_dropdown(self, trigger: Locator, value: str) -> None:
+    def _select_custom_dropdown(self, trigger: Locator, value: str) -> str:
         """Clicks the mat-select to open its options panel, then picks the
         option whose text best matches `value` from the options actually
-        offered, instead of assuming `value` is present verbatim."""
+        offered. Returns a human-readable description of what happened."""
         page = self.page
         target = self._normalize_text(value)
 
@@ -481,7 +481,7 @@ class VFSClient:
             current = self._normalize_text(trigger.inner_text())
             if current == target:
                 logger.info("'%s' is already selected, skipping", value)
-                return
+                return f"Уже выбрано: '{value}'"
         except Exception:
             pass
 
@@ -490,20 +490,19 @@ class VFSClient:
                 logger.info("Attempt %d: opening dropdown to pick '%s'", attempt + 1, value)
                 human_click(page, trigger)
                 page.wait_for_timeout(500)
-                self._step_screenshot(f"dropdown_open_{attempt + 1}")
 
                 options = page.get_by_role("option")
                 try:
                     options.first.wait_for(state="visible", timeout=5000)
                 except Exception:
                     logger.warning("No options appeared after clicking trigger for '%s'", value)
-                    self._step_screenshot(f"dropdown_no_options_{attempt + 1}")
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
 
                 texts = options.all_inner_texts()
                 logger.info("Available options for '%s': %r", value, texts)
+                options_str = ", ".join(f"'{t}'" for t in texts)
 
                 match_index = None
                 for i, text in enumerate(texts):
@@ -514,43 +513,48 @@ class VFSClient:
 
                 if match_index is None:
                     logger.warning("No option matching '%s' among %r", value, texts)
-                    self._step_screenshot(f"dropdown_no_match_{attempt + 1}")
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
 
-                logger.info("Clicking option [%d] %r for '%s'", match_index, texts[match_index], value)
+                chosen = texts[match_index]
+                logger.info("Clicking option [%d] %r for '%s'", match_index, chosen, value)
                 human_click(page, options.nth(match_index))
 
-                # After selecting a value the page reloads/re-renders the
-                # form (Angular fetches the next set of options, etc.).
-                # Wait for it to settle before verifying or moving on.
-                logger.info("Waiting for page to settle after selecting '%s'", value)
+                logger.info("Waiting 5s for page to reload after selecting '%s'", value)
                 page.wait_for_timeout(5000)
-                self._step_screenshot(f"dropdown_after_select_{attempt + 1}")
 
                 try:
-                    current = self._normalize_text(trigger.inner_text())
+                    current_text = trigger.inner_text()
                 except Exception:
-                    logger.info("Trigger detached after selecting '%s', re-locating", value)
-                    page.wait_for_timeout(2000)
-                    current = self._normalize_text(trigger.inner_text())
+                    logger.info("Trigger detached after selecting '%s', waiting", value)
+                    page.wait_for_timeout(3000)
+                    current_text = trigger.inner_text()
 
+                current = self._normalize_text(current_text)
                 if current == target or target in current or current in target:
-                    logger.info("'%s' successfully selected (trigger shows '%s')", value, current)
-                    return
+                    logger.info("'%s' successfully selected (trigger shows '%s')", value, current_text)
+                    return (
+                        f"Выбрано: '{chosen}'\n"
+                        f"Текущее значение: '{current_text}'\n"
+                        f"Все варианты: [{options_str}]"
+                    )
                 logger.warning(
                     "After selecting, trigger shows '%s' (expected '%s'), retrying",
-                    current,
+                    current_text,
                     value,
                 )
+                return (
+                    f"Кликнуто: '{chosen}', но отображается: '{current_text}'\n"
+                    f"Все варианты: [{options_str}]"
+                )
             except Exception:
-                logger.exception("Attempt %d to select '%s' failed, retrying", attempt + 1, value)
+                logger.exception("Attempt %d to select '%s' failed", attempt + 1, value)
 
             page.keyboard.press("Escape")
             page.wait_for_timeout(1000)
 
-        logger.warning("Giving up selecting '%s' after retries", value)
+        return f"ОШИБКА: не удалось выбрать '{value}' после 3 попыток"
 
     # ------------------------------------------------------------------
     # Locator helpers
@@ -591,11 +595,16 @@ class VFSClient:
             logger.exception("Failed to capture debug screenshot")
             return None
 
-    def _step_screenshot(self, name: str) -> None:
+    def _step_screenshot(self, name: str, telegram_caption: str | None = None) -> None:
         """Best-effort screenshot of a login step, used for visual debugging.
-        Controlled by vfs.debug_screenshots; failures are non-fatal."""
+        Controlled by vfs.debug_screenshots; failures are non-fatal.
+
+        If `telegram_caption` is given and a notifier is available, also sends
+        the screenshot to Telegram with that caption."""
         if not self.config.vfs.debug_screenshots:
             return
         path = self.save_debug_screenshot(name)
         if path:
             logger.info("Saved debug screenshot: %s", path)
+            if telegram_caption and self.notifier:
+                self.notifier.send_photo(path, telegram_caption)
