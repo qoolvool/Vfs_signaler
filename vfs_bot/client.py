@@ -212,7 +212,14 @@ class VFSClient:
                 ),
             ]
         )
-        page.wait_for_url(re.compile(r"book-appointment", re.I), timeout=60000)
+
+        # VFS is an Angular SPA — clicking the button triggers a client-side
+        # route change, not a full page load. Wait for the appointment form
+        # to appear instead of waiting for a URL navigation event.
+        logger.info("Login step: waiting for appointment form to appear")
+        page.locator("mat-select[formcontrolname='centerCode']").first.wait_for(
+            state="visible", timeout=60000
+        )
 
         self._step_screenshot("06_login_success")
         logger.info("Login successful")
