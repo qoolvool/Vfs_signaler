@@ -86,6 +86,15 @@ class VFSClient:
     # ------------------------------------------------------------------
     # Session state
     # ------------------------------------------------------------------
+    def navigate_to_login(self) -> None:
+        """Navigates to the login page. Used to reset the bot to a known
+        state after errors."""
+        try:
+            self.page.goto(self.config.vfs.login_url, wait_until="domcontentloaded")
+            logger.info("Navigated back to login page: %s", self.config.vfs.login_url)
+        except Exception:
+            logger.exception("Failed to navigate to login page")
+
     def open_appointments(self) -> bool:
         """Navigates to the appointment page. Returns True if logged in,
         False if the site redirected to the login page."""

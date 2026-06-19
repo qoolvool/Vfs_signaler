@@ -91,6 +91,7 @@ def run(config_path: str = "config.yaml") -> None:
                 logger.exception("VFS/Cloudflare returned an access-denied page")
                 shot = client.save_debug_screenshot("access_denied")
                 session.clear_state()
+                client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
                 backoff = config.vfs.access_denied_backoff_seconds
@@ -111,6 +112,7 @@ def run(config_path: str = "config.yaml") -> None:
                 logger.exception("VFS returned an Account Locked (429202) page")
                 shot = client.save_debug_screenshot("account_locked")
                 session.clear_state()
+                client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
                 backoff = 7200
@@ -129,6 +131,7 @@ def run(config_path: str = "config.yaml") -> None:
                 logger.exception("VFS returned a Session Expired page")
                 shot = client.save_debug_screenshot("session_expired")
                 session.clear_state()
+                client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
                 msg = (
@@ -144,6 +147,7 @@ def run(config_path: str = "config.yaml") -> None:
             except RequestTimedOutError:
                 logger.exception("VFS returned a Request Timed Out (504) page")
                 shot = client.save_debug_screenshot("request_timed_out")
+                client.navigate_to_login()
                 already_notified = False
                 last_notified_at = None
                 backoff = 600
@@ -161,6 +165,7 @@ def run(config_path: str = "config.yaml") -> None:
             except Exception:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")
+                client.navigate_to_login()
                 if shot:
                     notifier.send_photo(shot, "VFS bot: произошла ошибка, см. логи.")
                 else:
