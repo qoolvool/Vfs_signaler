@@ -420,20 +420,16 @@ class VFSClient:
         logger.info("Appointment form: selecting Application Centre = '%s'", vfs.application_centre)
         self._select_dropdown("Choose your Application Centre", vfs.application_centre, "centerCode")
         self._step_screenshot("10_after_centre")
-        random_delay(300, 800)
 
         logger.info("Appointment form: selecting category = '%s'", vfs.category)
         self._select_dropdown("Choose your appointment category", vfs.category, "selectedSubvisaCategory")
         self._step_screenshot("11_after_category")
-        # The sub-category options are loaded by VFS only after a category is
-        # selected, so give the page time to populate them before we try.
-        page.wait_for_timeout(1500)
 
         logger.info("Appointment form: selecting sub-category = '%s'", vfs.sub_category)
         self._select_dropdown("Choose your sub-category", vfs.sub_category, "visaCategoryCode")
         self._step_screenshot("12_after_subcategory")
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(3000)
         self._step_screenshot("13_final_form_state")
 
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
@@ -489,12 +485,21 @@ class VFSClient:
             try:
                 logger.info("Attempt %d: opening dropdown to pick '%s'", attempt + 1, value)
                 human_click(page, trigger)
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(500)
+                self._step_screenshot(f"dropdown_open_{attempt + 1}")
 
                 options = page.get_by_role("option")
-                options.first.wait_for(state="visible", timeout=5000)
+                try:
+                    options.first.wait_for(state="visible", timeout=5000)
+                except Exception:
+                    logger.warning("No options appeared after clicking trigger for '%s'", value)
+                    self._step_screenshot(f"dropdown_no_options_{attempt + 1}")
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
+                    continue
+
                 texts = options.all_inner_texts()
-                logger.info("Available options: %r", texts)
+                logger.info("Available options for '%s': %r", value, texts)
 
                 match_index = None
                 for i, text in enumerate(texts):
@@ -505,15 +510,28 @@ class VFSClient:
 
                 if match_index is None:
                     logger.warning("No option matching '%s' among %r", value, texts)
+                    self._step_screenshot(f"dropdown_no_match_{attempt + 1}")
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
 
-                logger.info("Selecting option %r for '%s'", texts[match_index], value)
+                logger.info("Clicking option [%d] %r for '%s'", match_index, texts[match_index], value)
                 human_click(page, options.nth(match_index))
-                page.wait_for_timeout(1000)
 
-                current = self._normalize_text(trigger.inner_text())
+                # After selecting a value the page reloads/re-renders the
+                # form (Angular fetches the next set of options, etc.).
+                # Wait for it to settle before verifying or moving on.
+                logger.info("Waiting for page to settle after selecting '%s'", value)
+                page.wait_for_timeout(5000)
+                self._step_screenshot(f"dropdown_after_select_{attempt + 1}")
+
+                try:
+                    current = self._normalize_text(trigger.inner_text())
+                except Exception:
+                    logger.info("Trigger detached after selecting '%s', re-locating", value)
+                    page.wait_for_timeout(2000)
+                    current = self._normalize_text(trigger.inner_text())
+
                 if current == target or target in current or current in target:
                     logger.info("'%s' successfully selected (trigger shows '%s')", value, current)
                     return
