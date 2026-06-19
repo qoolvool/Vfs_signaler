@@ -486,10 +486,27 @@ class VFSClient:
                 f"Результат: {result}",
             )
 
+        # Give the page a moment to render the slot-availability message after
+        # the last dropdown selection settles.
+        page.wait_for_timeout(3000)
+
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
         count = no_slots.count()
+        available = count == 0
         logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
-        return count == 0
+
+        if available:
+            status = (
+                "✅ Похоже, слоты ДОСТУПНЫ! Сообщение 'нет слотов' на странице "
+                "не найдено."
+            )
+        else:
+            status = "❌ Слотов нет ('no appointment slots are currently available')."
+        self._step_screenshot(
+            "20_slot_status",
+            f"VFS bot: результат проверки слотов.\n{status}",
+        )
+        return available
 
     def _select_dropdown(self, label_text: str, keyword: str, formcontrolname: str) -> str:
         """Selects the option containing `keyword` (case-insensitive) in the
