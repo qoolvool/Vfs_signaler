@@ -464,19 +464,25 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
+        # Each dropdown is matched by a keyword (case-insensitive substring)
+        # rather than the full option text — VFS renders these with varying
+        # punctuation/spacing, so a keyword is far more robust.
         dropdowns = [
-            ("Application Centre", vfs.application_centre, "centerCode"),
-            ("Appointment category", vfs.category, "selectedSubvisaCategory"),
-            ("Sub-category", vfs.sub_category, "visaCategoryCode"),
+            ("Application Centre", vfs.application_centre, "centerCode", "belgrade"),
+            ("Appointment category", vfs.category, "selectedSubvisaCategory", "c visa"),
+            ("Sub-category", vfs.sub_category, "visaCategoryCode", "tourist"),
         ]
 
-        for step, (label, value, fcn) in enumerate(dropdowns, start=1):
-            logger.info("Dropdown %d/3: %s → '%s' (formcontrolname='%s')", step, label, value, fcn)
-            result = self._select_dropdown(label, value, fcn)
+        for step, (label, value, fcn, keyword) in enumerate(dropdowns, start=1):
+            logger.info(
+                "Dropdown %d/3: %s → keyword '%s' (formcontrolname='%s')",
+                step, label, keyword, fcn,
+            )
+            result = self._select_dropdown(label, keyword, fcn)
             self._step_screenshot(
                 f"10_dropdown_{step}",
                 f"Dropdown {step}/3: {label}\n"
-                f"Целевое значение: {value}\n"
+                f"Ключевое слово: {keyword}\n"
                 f"Результат: {result}",
             )
 
@@ -485,16 +491,17 @@ class VFSClient:
         logger.info("'%s' matched %d time(s) on the page", NO_SLOTS_TEXT, count)
         return count == 0
 
-    def _select_dropdown(self, label_text: str, value: str, formcontrolname: str) -> str:
-        """Selects `value` in the mat-select identified by `formcontrolname`.
-        Returns a human-readable string describing the result."""
+    def _select_dropdown(self, label_text: str, keyword: str, formcontrolname: str) -> str:
+        """Selects the option containing `keyword` (case-insensitive) in the
+        mat-select identified by `formcontrolname`. Returns a human-readable
+        string describing the result."""
         page = self.page
 
         trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
         for attempt in range(2):
             try:
                 trigger.wait_for(state="visible", timeout=8000)
-                return self._select_custom_dropdown(trigger, value)
+                return self._select_custom_dropdown(trigger, keyword)
             except Exception:
                 logger.exception(
                     "Attempt %d: failed to select '%s' (formcontrolname='%s')",
@@ -505,26 +512,27 @@ class VFSClient:
                 page.wait_for_timeout(1500)
 
         logger.warning("Giving up on dropdown '%s'", label_text)
-        return f"ОШИБКА: не удалось выбрать '{value}' после 2 попыток"
+        return f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 2 попыток"
 
-    def _select_custom_dropdown(self, trigger: Locator, value: str) -> str:
+    def _select_custom_dropdown(self, trigger: Locator, keyword: str) -> str:
         """Clicks the mat-select to open its options panel, then picks the
-        option whose text best matches `value` from the options actually
-        offered. Returns a human-readable description of what happened."""
+        first option whose text contains `keyword` (case-insensitive).
+        Returns a human-readable description of what happened."""
         page = self.page
-        target = self._normalize_text(value)
+        needle = keyword.strip().lower()
 
+        # Check whether an option containing the keyword is already selected.
         try:
             current = self._normalize_text(trigger.inner_text())
-            if current == target:
-                logger.info("'%s' is already selected, skipping", value)
-                return f"Уже выбрано: '{value}'"
+            if needle in current:
+                logger.info("Keyword '%s' already selected ('%s'), skipping", keyword, current)
+                return f"Уже выбрано (содержит '{keyword}'): '{trigger.inner_text()}'"
         except Exception:
             pass
 
         for attempt in range(3):
             try:
-                logger.info("Attempt %d: opening dropdown to pick '%s'", attempt + 1, value)
+                logger.info("Attempt %d: opening dropdown to find '%s'", attempt + 1, keyword)
                 human_click(page, trigger)
                 page.wait_for_timeout(500)
 
@@ -532,66 +540,64 @@ class VFSClient:
                 try:
                     options.first.wait_for(state="visible", timeout=5000)
                 except Exception:
-                    logger.warning("No options appeared after clicking trigger for '%s'", value)
+                    logger.warning("No options appeared after clicking trigger for '%s'", keyword)
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
 
                 texts = options.all_inner_texts()
-                logger.info("Available options for '%s': %r", value, texts)
+                logger.info("Available options (looking for '%s'): %r", keyword, texts)
                 options_str = ", ".join(f"'{t}'" for t in texts)
 
                 match_index = None
                 for i, text in enumerate(texts):
-                    norm = self._normalize_text(text)
-                    if norm == target or target in norm or norm in target:
+                    if needle in text.strip().lower():
                         match_index = i
                         break
 
                 if match_index is None:
-                    logger.warning("No option matching '%s' among %r", value, texts)
+                    logger.warning("No option containing '%s' among %r", keyword, texts)
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
 
                 chosen = texts[match_index]
-                logger.info("Clicking option [%d] %r for '%s'", match_index, chosen, value)
+                logger.info("Clicking option [%d] %r (matches '%s')", match_index, chosen, keyword)
                 human_click(page, options.nth(match_index))
 
-                logger.info("Waiting 5s for page to reload after selecting '%s'", value)
+                logger.info("Waiting 5s for page to reload after selecting '%s'", chosen)
                 page.wait_for_timeout(5000)
 
                 try:
                     current_text = trigger.inner_text()
                 except Exception:
-                    logger.info("Trigger detached after selecting '%s', waiting", value)
+                    logger.info("Trigger detached after selecting '%s', waiting", chosen)
                     page.wait_for_timeout(3000)
                     current_text = trigger.inner_text()
 
-                current = self._normalize_text(current_text)
-                if current == target or target in current or current in target:
-                    logger.info("'%s' successfully selected (trigger shows '%s')", value, current_text)
+                if needle in current_text.strip().lower():
+                    logger.info("'%s' selected (trigger shows '%s')", keyword, current_text)
                     return (
                         f"Выбрано: '{chosen}'\n"
                         f"Текущее значение: '{current_text}'\n"
                         f"Все варианты: [{options_str}]"
                     )
                 logger.warning(
-                    "After selecting, trigger shows '%s' (expected '%s'), retrying",
+                    "After selecting, trigger shows '%s' (no '%s'), retrying",
                     current_text,
-                    value,
+                    keyword,
                 )
                 return (
                     f"Кликнуто: '{chosen}', но отображается: '{current_text}'\n"
                     f"Все варианты: [{options_str}]"
                 )
             except Exception:
-                logger.exception("Attempt %d to select '%s' failed", attempt + 1, value)
+                logger.exception("Attempt %d to select '%s' failed", attempt + 1, keyword)
 
             page.keyboard.press("Escape")
             page.wait_for_timeout(1000)
 
-        return f"ОШИБКА: не удалось выбрать '{value}' после 3 попыток"
+        return f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 3 попыток"
 
     # ------------------------------------------------------------------
     # Locator helpers
