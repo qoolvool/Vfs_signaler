@@ -4,7 +4,13 @@ import sys
 import time
 
 from .browser import BrowserSession
-from .client import AccessDeniedError, AccountLockedError, RequestTimedOutError, VFSClient
+from .client import (
+    AccessDeniedError,
+    AccountLockedError,
+    RequestTimedOutError,
+    SessionExpiredError,
+    VFSClient,
+)
 from .config import load_config
 from .mailbox import OTPMailbox
 from .notifier import TelegramNotifier
@@ -32,7 +38,8 @@ def run(config_path: str = "config.yaml") -> None:
                     notifier.send("VFS bot: требуется вход в аккаунт...")
                     try:
                         client.login()
-                    except (AccessDeniedError, RequestTimedOutError, AccountLockedError):
+                    except (AccessDeniedError, RequestTimedOutError,
+                            AccountLockedError, SessionExpiredError):
                         raise
                     except Exception:
                         logger.exception("Login failed")
@@ -114,6 +121,22 @@ def run(config_path: str = "config.yaml") -> None:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after account-locked", backoff)
                 time.sleep(backoff)
+                continue
+            except SessionExpiredError:
+                logger.exception("VFS returned a Session Expired page")
+                shot = client.save_debug_screenshot("session_expired")
+                session.clear_state()
+                already_notified = False
+                last_notified_at = None
+                msg = (
+                    "VFS bot: сессия истекла (Session Expired or Invalid). "
+                    "Куки сброшены, пробую войти заново."
+                )
+                if shot:
+                    notifier.send_photo(shot, msg)
+                else:
+                    notifier.send(msg)
+                logger.info("Session expired — cleared state, retrying immediately")
                 continue
             except RequestTimedOutError:
                 logger.exception("VFS returned a Request Timed Out (504) page")

@@ -51,6 +51,11 @@ ACCOUNT_LOCKED_PATTERNS = (
     re.compile(r"429202"),
 )
 
+SESSION_EXPIRED_PATTERNS = (
+    re.compile(r"session expired", re.I),
+    re.compile(r"session.{0,10}invalid", re.I),
+)
+
 
 class AccessDeniedError(RuntimeError):
     """Raised when VFS/Cloudflare returns a hard block page."""
@@ -62,6 +67,10 @@ class RequestTimedOutError(RuntimeError):
 
 class AccountLockedError(RuntimeError):
     """Raised when VFS returns an 'Account Locked (429202)' page."""
+
+
+class SessionExpiredError(RuntimeError):
+    """Raised when VFS returns a 'Session Expired or Invalid' page."""
 
 
 class VFSClient:
@@ -84,6 +93,7 @@ class VFSClient:
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
+        self.check_session_expired()
         self._accept_cookies()
         try:
             self.page.wait_for_url(re.compile(r"/login", re.I), timeout=5000)
@@ -130,6 +140,19 @@ class VFSClient:
                     f"VFS returned an Account Locked (429202) page (matched: {pattern.pattern!r})"
                 )
 
+    def check_session_expired(self) -> None:
+        """Raises SessionExpiredError if VFS returned a 'Session Expired or
+        Invalid' page."""
+        try:
+            content = self.page.content()
+        except Exception:
+            return
+        for pattern in SESSION_EXPIRED_PATTERNS:
+            if pattern.search(content):
+                raise SessionExpiredError(
+                    f"VFS returned a Session Expired page (matched: {pattern.pattern!r})"
+                )
+
     # ------------------------------------------------------------------
     # Login + OTP flow
     # ------------------------------------------------------------------
@@ -143,6 +166,7 @@ class VFSClient:
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
+        self.check_session_expired()
         self._accept_cookies()
         self._step_screenshot("01_login_page")
 
@@ -180,6 +204,7 @@ class VFSClient:
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
+        self.check_session_expired()
 
         logger.info("Login step: waiting for OTP input field")
         try:
@@ -216,6 +241,7 @@ class VFSClient:
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
+        self.check_session_expired()
 
         logger.info("Login step: clicking 'Start New Booking'")
         self._click_first(
