@@ -4,12 +4,12 @@ vfs:
   application_centre: "Visa Application Centre,Belgrade"
   category: "C visa"
   sub_category: "Tourist, Visit , Business"
-  # Cautious cadence for a residential/mobile proxy: a random 6-10 min gap
-  # between checks. Frequent enough to catch fast-disappearing slots, slow
-  # enough to avoid VFS rate-limit blocks. If the bot starts hitting blocks
-  # repeatedly, it automatically backs off further (see main.py).
-  poll_interval_min_seconds: 360
-  poll_interval_max_seconds: 600
+  # Cautious cadence for a residential/mobile proxy: a random 30-45 min gap
+  # between checks. Slow enough to avoid VFS rate-limit blocks. If the bot
+  # starts hitting blocks repeatedly, it automatically backs off further
+  # (see main.py).
+  poll_interval_min_seconds: 1800
+  poll_interval_max_seconds: 2700
   # If > 0, repeat the Telegram notification every N seconds while the slot
   # remains available (in addition to the first one). 0 = notify only once
   # per appearance.
