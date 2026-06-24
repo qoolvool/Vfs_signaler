@@ -15,7 +15,7 @@ class VFSConfig:
     category: str
     sub_category: str
     poll_interval_min_seconds: int = 1800
-    poll_interval_max_seconds: int = 2700
+    poll_interval_max_seconds: int = 2400
     reminder_interval_seconds: int = 0
     # How long to back off after VFS returns a hard block (e.g. 429002
     # "Unauthorised Activity"). Hammering it only extends the block.

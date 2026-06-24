@@ -2,6 +2,7 @@ import logging
 import random
 import sys
 import time
+import traceback
 
 from .browser import BrowserSession
 from .client import (
@@ -48,13 +49,19 @@ def run(config_path: str = "config.yaml") -> None:
                             AccountLockedError, SessionExpiredError,
                             AccessRestrictedError):
                         raise
-                    except Exception:
+                    except Exception as exc:
                         logger.exception("Login failed")
                         shot = client.save_debug_screenshot("login_failed")
+                        tb = traceback.format_exc()
+                        err_msg = (
+                            f"VFS bot: вход не удался.\n\n"
+                            f"Ошибка: {type(exc).__name__}: {exc}\n\n"
+                            f"Traceback:\n{tb[-1500:]}"
+                        )
                         if shot:
-                            notifier.send_photo(shot, "VFS bot: вход не удался, см. скриншот")
+                            notifier.send_photo(shot, err_msg)
                         else:
-                            notifier.send("VFS bot: вход не удался, см. логи.")
+                            notifier.send(err_msg)
                         raise
                     shot = client.save_debug_screenshot("login_success")
                     if shot:
@@ -175,14 +182,20 @@ def run(config_path: str = "config.yaml") -> None:
                 logger.info("Backing off for %d seconds after a 504 timeout", backoff)
                 time.sleep(backoff)
                 continue
-            except Exception:
+            except Exception as exc:
                 logger.exception("Error during polling cycle")
                 shot = client.save_debug_screenshot("error")
                 client.navigate_to_login()
+                tb = traceback.format_exc()
+                err_msg = (
+                    f"VFS bot: произошла ошибка.\n\n"
+                    f"Ошибка: {type(exc).__name__}: {exc}\n\n"
+                    f"Traceback:\n{tb[-1500:]}"
+                )
                 if shot:
-                    notifier.send_photo(shot, "VFS bot: произошла ошибка, см. логи.")
+                    notifier.send_photo(shot, err_msg)
                 else:
-                    notifier.send("VFS bot: произошла ошибка, см. логи.")
+                    notifier.send(err_msg)
 
             session.save_state()
 
