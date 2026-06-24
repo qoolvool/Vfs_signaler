@@ -1,6 +1,7 @@
 import logging
 import random
 import sys
+import threading
 import time
 import traceback
 
@@ -13,7 +14,7 @@ from .client import (
     SessionExpiredError,
     VFSClient,
 )
-from .config import load_config
+from .config import AppConfig, load_config
 from .mailbox import OTPMailbox
 from .notifier import TelegramNotifier
 
@@ -21,8 +22,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-def run(config_path: str = "config.yaml") -> None:
-    config = load_config(config_path)
+def _interruptible_sleep(seconds: float, stop_event: threading.Event | None) -> bool:
+    """Sleep for *seconds*, returning early if *stop_event* is set.
+    Returns True when interrupted (caller should break out of the loop)."""
+    if stop_event:
+        return stop_event.wait(seconds)
+    time.sleep(seconds)
+    return False
+
+
+def run(config_path: str = "config.yaml", *,
+        config: AppConfig | None = None,
+        stop_event: threading.Event | None = None) -> None:
+    if config is None:
+        config = load_config(config_path)
     mailbox = OTPMailbox(config.imap)
     notifier = TelegramNotifier(config.telegram)
 
@@ -39,7 +52,7 @@ def run(config_path: str = "config.yaml") -> None:
         # the bot stops hammering VFS when it's clearly being rate-limited. A
         # clean check resets it to 0.
         consecutive_blocks = 0
-        while True:
+        while not (stop_event and stop_event.is_set()):
             try:
                 if not client.open_appointments():
                     notifier.send("VFS bot: требуется вход в аккаунт...")
@@ -102,7 +115,8 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after access-denied", backoff)
-                time.sleep(backoff)
+                if _interruptible_sleep(backoff, stop_event):
+                    break
                 continue
             except AccountLockedError:
                 logger.exception("VFS returned an Account Locked (429202) page")
@@ -122,7 +136,8 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after account-locked", backoff)
-                time.sleep(backoff)
+                if _interruptible_sleep(backoff, stop_event):
+                    break
                 continue
             except AccessRestrictedError:
                 logger.exception("VFS returned an Access Restricted (429001) page")
@@ -143,7 +158,8 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after access-restricted", backoff)
-                time.sleep(backoff)
+                if _interruptible_sleep(backoff, stop_event):
+                    break
                 continue
             except SessionExpiredError:
                 logger.exception("VFS returned a Session Expired page")
@@ -180,7 +196,8 @@ def run(config_path: str = "config.yaml") -> None:
                 else:
                     notifier.send(msg)
                 logger.info("Backing off for %d seconds after a 504 timeout", backoff)
-                time.sleep(backoff)
+                if _interruptible_sleep(backoff, stop_event):
+                    break
                 continue
             except Exception as exc:
                 logger.exception("Error during polling cycle")
@@ -204,7 +221,10 @@ def run(config_path: str = "config.yaml") -> None:
                 config.vfs.poll_interval_max_seconds,
             )
             logger.info("Next check in %d seconds", delay)
-            time.sleep(delay)
+            if _interruptible_sleep(delay, stop_event):
+                break
+
+        logger.info("Bot stopped")
 
 
 if __name__ == "__main__":
