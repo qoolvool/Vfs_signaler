@@ -652,23 +652,33 @@ class VFSClient:
         string describing the result."""
         page = self.page
 
-        trigger = page.locator(f"mat-select[formcontrolname='{formcontrolname}']").first
-        for attempt in range(2):
+        selector = f"mat-select[formcontrolname='{formcontrolname}']"
+        for attempt in range(3):
             try:
-                trigger.wait_for(state="visible", timeout=8000)
-                return self._select_custom_dropdown(trigger, keyword)
+                trigger = page.locator(selector).first
+                trigger.wait_for(state="visible", timeout=10000)
+                result = self._select_custom_dropdown(trigger, keyword)
+                if "ОШИБКА" not in result:
+                    return result
+                logger.warning(
+                    "Attempt %d/3 for '%s': dropdown returned error, retrying",
+                    attempt + 1,
+                    label_text,
+                )
             except Exception:
                 logger.exception(
-                    "Attempt %d: failed to select '%s' (formcontrolname='%s')",
+                    "Attempt %d/3: failed to select '%s' (formcontrolname='%s')",
                     attempt + 1,
                     label_text,
                     formcontrolname,
                 )
-                page.wait_for_timeout(1500)
+            page.wait_for_timeout(2000)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
 
-        logger.warning("Giving up on dropdown '%s'", label_text)
+        logger.warning("Giving up on dropdown '%s' after 3 attempts", label_text)
         return (
-            f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 2 попыток"
+            f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 3 попыток"
         )
 
     def _select_custom_dropdown(self, trigger: Locator, keyword: str) -> str:
@@ -678,7 +688,6 @@ class VFSClient:
         page = self.page
         needle = keyword.strip().lower()
 
-        # Check whether an option containing the keyword is already selected.
         try:
             current = self._normalize_text(trigger.inner_text())
             if needle in current:
@@ -692,7 +701,9 @@ class VFSClient:
         for attempt in range(3):
             try:
                 logger.info(
-                    "Attempt %d: opening dropdown to find '%s'", attempt + 1, keyword
+                    "Attempt %d/3: opening dropdown to find '%s'",
+                    attempt + 1,
+                    keyword,
                 )
                 human_click(page, trigger)
                 page.wait_for_timeout(500)
@@ -705,7 +716,7 @@ class VFSClient:
                         "No options appeared after clicking trigger for '%s'", keyword
                     )
                     page.keyboard.press("Escape")
-                    page.wait_for_timeout(1000)
+                    page.wait_for_timeout(1500)
                     continue
 
                 texts = options.all_inner_texts()
@@ -721,7 +732,7 @@ class VFSClient:
                 if match_index is None:
                     logger.warning("No option containing '%s' among %r", keyword, texts)
                     page.keyboard.press("Escape")
-                    page.wait_for_timeout(1000)
+                    page.wait_for_timeout(2000)
                     continue
 
                 chosen = texts[match_index]
@@ -761,13 +772,9 @@ class VFSClient:
                     current_text,
                     keyword,
                 )
-                return (
-                    f"Кликнуто: '{chosen}', но отображается: '{current_text}'\n"
-                    f"Все варианты: [{options_str}]"
-                )
             except Exception:
                 logger.exception(
-                    "Attempt %d to select '%s' failed", attempt + 1, keyword
+                    "Attempt %d/3 to select '%s' failed", attempt + 1, keyword
                 )
 
             page.keyboard.press("Escape")
