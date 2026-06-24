@@ -10,6 +10,7 @@ from .config import ProxyConfig, VFSConfig
 
 logger = logging.getLogger(__name__)
 
+
 class BrowserSession:
     """Owns the Playwright browser/context lifecycle and persists cookies between runs."""
 

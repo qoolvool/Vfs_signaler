@@ -73,7 +73,9 @@ class OTPMailbox:
                 status, data = conn.search(
                     None, "FROM", f'"{self.config.sender_filter}"'
                 )
-                msg_ids = data[0].split() if (status == "OK" and data and data[0]) else []
+                msg_ids = (
+                    data[0].split() if (status == "OK" and data and data[0]) else []
+                )
                 logger.info(
                     "IMAP: poll #%d — found %d message(s) from '%s'",
                     attempt,
@@ -195,12 +197,19 @@ class OTPMailbox:
             for part in msg.walk():
                 content_type = part.get_content_type()
                 disposition = str(part.get("Content-Disposition") or "")
-                if content_type in ("text/plain", "text/html") and "attachment" not in disposition:
+                if (
+                    content_type in ("text/plain", "text/html")
+                    and "attachment" not in disposition
+                ):
                     payload = part.get_payload(decode=True)
                     if payload:
-                        return payload.decode(part.get_content_charset() or "utf-8", errors="ignore")
+                        return payload.decode(
+                            part.get_content_charset() or "utf-8", errors="ignore"
+                        )
         else:
             payload = msg.get_payload(decode=True)
             if payload:
-                return payload.decode(msg.get_content_charset() or "utf-8", errors="ignore")
+                return payload.decode(
+                    msg.get_content_charset() or "utf-8", errors="ignore"
+                )
         return ""

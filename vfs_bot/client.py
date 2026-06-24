@@ -87,8 +87,13 @@ class AccessRestrictedError(RuntimeError):
 class VFSClient:
     """Drives the VFS Global Croatia (Belgrade) appointment booking site."""
 
-    def __init__(self, page: Page, config: AppConfig, mailbox: OTPMailbox,
-                 notifier: TelegramNotifier | None = None):
+    def __init__(
+        self,
+        page: Page,
+        config: AppConfig,
+        mailbox: OTPMailbox,
+        notifier: TelegramNotifier | None = None,
+    ):
         self.page = page
         self.config = config
         self.mailbox = mailbox
@@ -234,8 +239,9 @@ class VFSClient:
         request_time = time.time()
         self._click_sign_in()
         page.wait_for_timeout(3000)
-        self._step_screenshot("03b_after_sign_in",
-                              "VFS bot: после нажатия Sign In (логин/пароль)")
+        self._step_screenshot(
+            "03b_after_sign_in", "VFS bot: после нажатия Sign In (логин/пароль)"
+        )
         self.check_access_denied()
         self.check_request_timeout()
         self.check_account_locked()
@@ -254,8 +260,10 @@ class VFSClient:
                 timeout=60000,
             )
         except PlaywrightTimeoutError:
-            self._step_screenshot("03c_otp_not_found",
-                                  "VFS bot: поле OTP не найдено. Скриншот текущей страницы.")
+            self._step_screenshot(
+                "03c_otp_not_found",
+                "VFS bot: поле OTP не найдено. Скриншот текущей страницы.",
+            )
             self.check_access_denied()
             self.check_request_timeout()
             self.check_account_locked()
@@ -333,9 +341,7 @@ class VFSClient:
         non-fatal: if no banner shows up within `timeout`, does nothing."""
         page = self.page
         try:
-            button = page.get_by_role(
-                "button", name=re.compile("accept", re.I)
-            ).first
+            button = page.get_by_role("button", name=re.compile("accept", re.I)).first
             button.wait_for(state="visible", timeout=timeout)
             human_click(page, button)
             logger.info("Dismissed cookie consent banner")
@@ -369,7 +375,9 @@ class VFSClient:
                 next_click_at = time.time() + 3
             page.wait_for_timeout(500)
 
-        logger.warning("Cloudflare pass not confirmed within timeout, continuing anyway")
+        logger.warning(
+            "Cloudflare pass not confirmed within timeout, continuing anyway"
+        )
 
     def _cloudflare_passed(self) -> bool:
         """Detects whether the Cloudflare/Turnstile challenge is solved.
@@ -382,8 +390,8 @@ class VFSClient:
         try:
             token = page.evaluate(
                 "() => { const el = document.querySelector("
-                "'[name=\"cf-turnstile-response\"], "
-                "[name=\"g-recaptcha-response\"]'); "
+                '\'[name="cf-turnstile-response"], '
+                '[name="g-recaptcha-response"]\'); '
                 "return el ? el.value : ''; }"
             )
             if token:
@@ -397,14 +405,18 @@ class VFSClient:
                 "iframe[src*='challenges.cloudflare.com'], "
                 "iframe[title*='Cloudflare' i], iframe[title*='challenge' i]"
             )
-            if frame.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.is_visible():
+            if frame.get_by_text(
+                CLOUDFLARE_SUCCESS_TEXT, exact=False
+            ).first.is_visible():
                 return True
         except Exception:
             pass
 
         # 3) Some flows render "Success" in the main document.
         try:
-            if page.get_by_text(CLOUDFLARE_SUCCESS_TEXT, exact=False).first.is_visible():
+            if page.get_by_text(
+                CLOUDFLARE_SUCCESS_TEXT, exact=False
+            ).first.is_visible():
                 return True
         except Exception:
             pass
@@ -515,7 +527,10 @@ class VFSClient:
         for step, (label, value, fcn, keyword) in enumerate(dropdowns, start=1):
             logger.info(
                 "Dropdown %d/3: %s → keyword '%s' (formcontrolname='%s')",
-                step, label, keyword, fcn,
+                step,
+                label,
+                keyword,
+                fcn,
             )
             result = self._select_dropdown(label, keyword, fcn)
             logger.info("Dropdown %d/3 result: %s", step, result)
@@ -532,7 +547,8 @@ class VFSClient:
         )
         try:
             page.locator(result_selector).first.wait_for(
-                state="visible", timeout=15000,
+                state="visible",
+                timeout=15000,
             )
             logger.info("Slot result element appeared on page")
         except PlaywrightTimeoutError:
@@ -596,9 +612,13 @@ class VFSClient:
                 if cnt > 0:
                     text = loc.first.inner_text().strip()
                     if text:
-                        logger.info("Found slot message via '%s': %s", selector, text[:200])
+                        logger.info(
+                            "Found slot message via '%s': %s", selector, text[:200]
+                        )
                         return text
-                    logger.info("Selector '%s' matched %d el(s) but text empty", selector, cnt)
+                    logger.info(
+                        "Selector '%s' matched %d el(s) but text empty", selector, cnt
+                    )
             except Exception:
                 logger.exception("Error checking selector '%s'", selector)
 
@@ -608,14 +628,18 @@ class VFSClient:
             section = page.locator("app-eligibility-criteria")
             if section.count() > 0:
                 full = section.first.inner_text().strip()
-                logger.warning("No result element found. Full form text: %s", full[:500])
+                logger.warning(
+                    "No result element found. Full form text: %s", full[:500]
+                )
         except Exception:
             pass
 
         logger.warning("_read_slot_message: nothing found on the page")
         return None
 
-    def _select_dropdown(self, label_text: str, keyword: str, formcontrolname: str) -> str:
+    def _select_dropdown(
+        self, label_text: str, keyword: str, formcontrolname: str
+    ) -> str:
         """Selects the option containing `keyword` (case-insensitive) in the
         mat-select identified by `formcontrolname`. Returns a human-readable
         string describing the result."""
@@ -636,7 +660,9 @@ class VFSClient:
                 page.wait_for_timeout(1500)
 
         logger.warning("Giving up on dropdown '%s'", label_text)
-        return f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 2 попыток"
+        return (
+            f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 2 попыток"
+        )
 
     def _select_custom_dropdown(self, trigger: Locator, keyword: str) -> str:
         """Clicks the mat-select to open its options panel, then picks the
@@ -649,14 +675,18 @@ class VFSClient:
         try:
             current = self._normalize_text(trigger.inner_text())
             if needle in current:
-                logger.info("Keyword '%s' already selected ('%s'), skipping", keyword, current)
+                logger.info(
+                    "Keyword '%s' already selected ('%s'), skipping", keyword, current
+                )
                 return f"Уже выбрано (содержит '{keyword}'): '{trigger.inner_text()}'"
         except Exception:
             pass
 
         for attempt in range(3):
             try:
-                logger.info("Attempt %d: opening dropdown to find '%s'", attempt + 1, keyword)
+                logger.info(
+                    "Attempt %d: opening dropdown to find '%s'", attempt + 1, keyword
+                )
                 human_click(page, trigger)
                 page.wait_for_timeout(500)
 
@@ -664,7 +694,9 @@ class VFSClient:
                 try:
                     options.first.wait_for(state="visible", timeout=5000)
                 except Exception:
-                    logger.warning("No options appeared after clicking trigger for '%s'", keyword)
+                    logger.warning(
+                        "No options appeared after clicking trigger for '%s'", keyword
+                    )
                     page.keyboard.press("Escape")
                     page.wait_for_timeout(1000)
                     continue
@@ -686,21 +718,32 @@ class VFSClient:
                     continue
 
                 chosen = texts[match_index]
-                logger.info("Clicking option [%d] %r (matches '%s')", match_index, chosen, keyword)
+                logger.info(
+                    "Clicking option [%d] %r (matches '%s')",
+                    match_index,
+                    chosen,
+                    keyword,
+                )
                 human_click(page, options.nth(match_index))
 
-                logger.info("Waiting 5s for page to reload after selecting '%s'", chosen)
+                logger.info(
+                    "Waiting 5s for page to reload after selecting '%s'", chosen
+                )
                 page.wait_for_timeout(5000)
 
                 try:
                     current_text = trigger.inner_text()
                 except Exception:
-                    logger.info("Trigger detached after selecting '%s', waiting", chosen)
+                    logger.info(
+                        "Trigger detached after selecting '%s', waiting", chosen
+                    )
                     page.wait_for_timeout(3000)
                     current_text = trigger.inner_text()
 
                 if needle in current_text.strip().lower():
-                    logger.info("'%s' selected (trigger shows '%s')", keyword, current_text)
+                    logger.info(
+                        "'%s' selected (trigger shows '%s')", keyword, current_text
+                    )
                     return (
                         f"Выбрано: '{chosen}'\n"
                         f"Текущее значение: '{current_text}'\n"
@@ -716,12 +759,16 @@ class VFSClient:
                     f"Все варианты: [{options_str}]"
                 )
             except Exception:
-                logger.exception("Attempt %d to select '%s' failed", attempt + 1, keyword)
+                logger.exception(
+                    "Attempt %d to select '%s' failed", attempt + 1, keyword
+                )
 
             page.keyboard.press("Escape")
             page.wait_for_timeout(1000)
 
-        return f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 3 попыток"
+        return (
+            f"ОШИБКА: не удалось выбрать вариант со словом '{keyword}' после 3 попыток"
+        )
 
     # ------------------------------------------------------------------
     # Locator helpers

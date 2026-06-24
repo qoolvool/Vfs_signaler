@@ -54,7 +54,11 @@ class VFSBotGUI:
 
     def _entry(self, parent, row, label, key, *, show=None, width=45):
         ttk.Label(parent, text=label, anchor="w").grid(
-            row=row, column=0, sticky="w", padx=(5, 10), pady=3,
+            row=row,
+            column=0,
+            sticky="w",
+            padx=(5, 10),
+            pady=3,
         )
         var = tk.StringVar()
         self.vars[key] = var
@@ -109,7 +113,9 @@ class VFSBotGUI:
         headless_var = tk.BooleanVar()
         self.vars["headless"] = headless_var
         self.headless_cb = ttk.Checkbutton(
-            tab_vfs, text="Headless (без окна браузера)", variable=headless_var,
+            tab_vfs,
+            text="Headless (без окна браузера)",
+            variable=headless_var,
         )
         self.headless_cb.grid(row=8, column=0, columnspan=2, sticky="w", padx=5, pady=3)
 
@@ -140,19 +146,23 @@ class VFSBotGUI:
         ctrl_frame.pack(fill="x", padx=10, pady=8)
 
         self.start_btn = ttk.Button(
-            ctrl_frame, text="▶  Запустить",
+            ctrl_frame,
+            text="▶  Запустить",
             command=self._start_bot,
         )
         self.start_btn.pack(side="left", padx=(0, 10))
 
         self.stop_btn = ttk.Button(
-            ctrl_frame, text="■  Остановить",
-            command=self._stop_bot, state="disabled",
+            ctrl_frame,
+            text="■  Остановить",
+            command=self._stop_bot,
+            state="disabled",
         )
         self.stop_btn.pack(side="left", padx=(0, 20))
 
         self.status_label = ttk.Label(
-            ctrl_frame, text="● Остановлен",
+            ctrl_frame,
+            text="● Остановлен",
             style="Stop.TLabel",
         )
         self.status_label.pack(side="left")
@@ -165,7 +175,10 @@ class VFSBotGUI:
         log_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         self.log_text = scrolledtext.ScrolledText(
-            log_frame, height=10, state="disabled", wrap="word",
+            log_frame,
+            height=10,
+            state="disabled",
+            wrap="word",
             font=("Consolas", 9),
         )
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)

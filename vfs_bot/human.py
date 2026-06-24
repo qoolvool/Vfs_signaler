@@ -9,7 +9,9 @@ def random_delay(min_ms: int = 300, max_ms: int = 900) -> None:
     time.sleep(random.uniform(min_ms, max_ms) / 1000)
 
 
-def human_type(locator: Locator, text: str, min_delay_ms: int = 40, max_delay_ms: int = 160) -> None:
+def human_type(
+    locator: Locator, text: str, min_delay_ms: int = 40, max_delay_ms: int = 160
+) -> None:
     """Types text one character at a time with randomized inter-key delays,
     instead of Playwright's instant fill()."""
     locator.scroll_into_view_if_needed()
@@ -62,4 +64,3 @@ def human_mouse_move_to(page: Page, x: float, y: float) -> None:
     teleport, so the trajectory looks hand-driven."""
     page.mouse.move(x, y, steps=random.randint(15, 35))
     random_delay(80, 200)
-

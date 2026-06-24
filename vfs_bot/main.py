@@ -31,9 +31,12 @@ def _interruptible_sleep(seconds: float, stop_event: threading.Event | None) -> 
     return False
 
 
-def run(config_path: str = "config.yaml", *,
-        config: AppConfig | None = None,
-        stop_event: threading.Event | None = None) -> None:
+def run(
+    config_path: str = "config.yaml",
+    *,
+    config: AppConfig | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     if config is None:
         config = load_config(config_path)
     mailbox = OTPMailbox(config.imap)
@@ -45,8 +48,6 @@ def run(config_path: str = "config.yaml", *,
 
         notifier.send("VFS bot: мониторинг слотов запущен.")
 
-        already_notified = False
-        last_notified_at: float | None = None
         # Counts blocks that happen back-to-back. Each consecutive block makes
         # the recoverable backoffs (Access Denied / 504) progressively longer so
         # the bot stops hammering VFS when it's clearly being rate-limited. A
@@ -58,9 +59,13 @@ def run(config_path: str = "config.yaml", *,
                     notifier.send("VFS bot: требуется вход в аккаунт...")
                     try:
                         client.login()
-                    except (AccessDeniedError, RequestTimedOutError,
-                            AccountLockedError, SessionExpiredError,
-                            AccessRestrictedError):
+                    except (
+                        AccessDeniedError,
+                        RequestTimedOutError,
+                        AccountLockedError,
+                        SessionExpiredError,
+                        AccessRestrictedError,
+                    ):
                         raise
                     except Exception as exc:
                         logger.exception("Login failed")
@@ -99,11 +104,12 @@ def run(config_path: str = "config.yaml", *,
                 shot = client.save_debug_screenshot("access_denied")
                 session.clear_state()
                 client.navigate_to_login()
-                already_notified = False
-                last_notified_at = None
+
                 consecutive_blocks += 1
                 # Progressive backoff: 1x, 2x, 3x... the base, capped at 4x.
-                backoff = config.vfs.access_denied_backoff_seconds * min(consecutive_blocks, 4)
+                backoff = config.vfs.access_denied_backoff_seconds * min(
+                    consecutive_blocks, 4
+                )
                 minutes = max(backoff // 60, 1)
                 msg = (
                     "VFS bot: доступ заблокирован (Access Denied / 429002 — "
@@ -123,8 +129,7 @@ def run(config_path: str = "config.yaml", *,
                 shot = client.save_debug_screenshot("account_locked")
                 session.clear_state()
                 client.navigate_to_login()
-                already_notified = False
-                last_notified_at = None
+
                 consecutive_blocks += 1
                 backoff = 7200
                 msg = (
@@ -144,8 +149,7 @@ def run(config_path: str = "config.yaml", *,
                 shot = client.save_debug_screenshot("access_restricted")
                 session.clear_state()
                 client.navigate_to_login()
-                already_notified = False
-                last_notified_at = None
+
                 consecutive_blocks += 1
                 backoff = 7200
                 msg = (
@@ -157,7 +161,9 @@ def run(config_path: str = "config.yaml", *,
                     notifier.send_photo(shot, msg)
                 else:
                     notifier.send(msg)
-                logger.info("Backing off for %d seconds after access-restricted", backoff)
+                logger.info(
+                    "Backing off for %d seconds after access-restricted", backoff
+                )
                 if _interruptible_sleep(backoff, stop_event):
                     break
                 continue
@@ -166,8 +172,7 @@ def run(config_path: str = "config.yaml", *,
                 shot = client.save_debug_screenshot("session_expired")
                 session.clear_state()
                 client.navigate_to_login()
-                already_notified = False
-                last_notified_at = None
+
                 consecutive_blocks += 1
                 msg = (
                     "VFS bot: сессия истекла (Session Expired or Invalid). "
@@ -183,8 +188,7 @@ def run(config_path: str = "config.yaml", *,
                 logger.exception("VFS returned a Request Timed Out (504) page")
                 shot = client.save_debug_screenshot("request_timed_out")
                 client.navigate_to_login()
-                already_notified = False
-                last_notified_at = None
+
                 consecutive_blocks += 1
                 backoff = 600 * min(consecutive_blocks, 3)
                 msg = (
