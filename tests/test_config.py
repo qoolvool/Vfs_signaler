@@ -91,6 +91,28 @@ class TestLoadConfig:
         assert cfg.vfs.headless is True
         assert cfg.imap.port == 1143
 
+    def test_keywords_from_yaml(self, tmp_path):
+        path = tmp_path / "config.yaml"
+        path.write_text(
+            textwrap.dedent("""\
+            vfs:
+              login_url: "https://x.com/login"
+              appointment_url: "https://x.com/book"
+              application_centre: "Visa Application Centre,Zagreb"
+              centre_keyword: "zagreb"
+              category: "D visa"
+              category_keyword: "d visa"
+              sub_category: "Work"
+              sub_category_keyword: "work"
+            imap:
+              host: "imap.x.com"
+        """)
+        )
+        cfg = load_config(str(path))
+        assert cfg.vfs.centre_keyword == "zagreb"
+        assert cfg.vfs.category_keyword == "d visa"
+        assert cfg.vfs.sub_category_keyword == "work"
+
 
 class TestProxyConfig:
     def test_disabled_when_empty(self):
@@ -135,3 +157,30 @@ class TestVFSConfigDefaults:
         assert v.debug_screenshots is True
         assert v.debug_dir == "debug"
         assert v.storage_state_path == "storage_state.json"
+
+    def test_keyword_defaults_from_full_values(self):
+        v = VFSConfig(
+            login_url="https://a.com",
+            appointment_url="https://b.com",
+            application_centre="Visa Application Centre,Belgrade",
+            category="C visa",
+            sub_category="Tourist, Visit , Business",
+        )
+        assert v.centre_keyword == "visa application centre,belgrade"
+        assert v.category_keyword == "c visa"
+        assert v.sub_category_keyword == "tourist, visit , business"
+
+    def test_keyword_explicit_overrides(self):
+        v = VFSConfig(
+            login_url="https://a.com",
+            appointment_url="https://b.com",
+            application_centre="Visa Application Centre,Belgrade",
+            category="C visa",
+            sub_category="Tourist, Visit , Business",
+            centre_keyword="belgrade",
+            category_keyword="c visa",
+            sub_category_keyword="tourist",
+        )
+        assert v.centre_keyword == "belgrade"
+        assert v.category_keyword == "c visa"
+        assert v.sub_category_keyword == "tourist"

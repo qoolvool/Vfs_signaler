@@ -14,11 +14,12 @@ class VFSConfig:
     application_centre: str
     category: str
     sub_category: str
+    centre_keyword: str = ""
+    category_keyword: str = ""
+    sub_category_keyword: str = ""
     poll_interval_min_seconds: int = 1800
     poll_interval_max_seconds: int = 2400
     reminder_interval_seconds: int = 0
-    # How long to back off after VFS returns a hard block (e.g. 429002
-    # "Unauthorised Activity"). Hammering it only extends the block.
     access_denied_backoff_seconds: int = 1800
     headless: bool = False
     storage_state_path: str = "storage_state.json"
@@ -26,6 +27,14 @@ class VFSConfig:
     debug_dir: str = "debug"
     email: str = field(default_factory=lambda: os.environ.get("VFS_EMAIL", ""))
     password: str = field(default_factory=lambda: os.environ.get("VFS_PASSWORD", ""))
+
+    def __post_init__(self) -> None:
+        if not self.centre_keyword:
+            self.centre_keyword = self.application_centre.lower()
+        if not self.category_keyword:
+            self.category_keyword = self.category.lower()
+        if not self.sub_category_keyword:
+            self.sub_category_keyword = self.sub_category.lower()
 
 
 @dataclass

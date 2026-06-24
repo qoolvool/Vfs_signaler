@@ -524,9 +524,24 @@ class VFSClient:
         # rather than the full option text — VFS renders these with varying
         # punctuation/spacing, so a keyword is far more robust.
         dropdowns = [
-            ("Application Centre", vfs.application_centre, "centerCode", "belgrade"),
-            ("Appointment category", vfs.category, "selectedSubvisaCategory", "c visa"),
-            ("Sub-category", vfs.sub_category, "visaCategoryCode", "tourist"),
+            (
+                "Application Centre",
+                vfs.application_centre,
+                "centerCode",
+                vfs.centre_keyword,
+            ),
+            (
+                "Appointment category",
+                vfs.category,
+                "selectedSubvisaCategory",
+                vfs.category_keyword,
+            ),
+            (
+                "Sub-category",
+                vfs.sub_category,
+                "visaCategoryCode",
+                vfs.sub_category_keyword,
+            ),
         ]
 
         self._accept_cookies(timeout=2000)

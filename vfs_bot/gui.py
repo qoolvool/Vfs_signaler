@@ -90,13 +90,16 @@ class VFSBotGUI:
         self._entry(tab_vfs, 0, "Login URL:", "login_url")
         self._entry(tab_vfs, 1, "Appointment URL:", "appointment_url")
         self._entry(tab_vfs, 2, "Application Centre:", "application_centre")
-        self._entry(tab_vfs, 3, "Category:", "category")
-        self._entry(tab_vfs, 4, "Sub-category:", "sub_category")
-        self._entry(tab_vfs, 5, "Email:", "vfs_email")
-        self._entry(tab_vfs, 6, "Password:", "vfs_password", show="*")
+        self._entry(tab_vfs, 3, "Centre keyword:", "centre_keyword")
+        self._entry(tab_vfs, 4, "Category:", "category")
+        self._entry(tab_vfs, 5, "Category keyword:", "category_keyword")
+        self._entry(tab_vfs, 6, "Sub-category:", "sub_category")
+        self._entry(tab_vfs, 7, "Sub-cat keyword:", "sub_category_keyword")
+        self._entry(tab_vfs, 8, "Email:", "vfs_email")
+        self._entry(tab_vfs, 9, "Password:", "vfs_password", show="*")
 
         interval_frame = ttk.Frame(tab_vfs)
-        interval_frame.grid(row=7, column=0, columnspan=2, sticky="ew", padx=5, pady=3)
+        interval_frame.grid(row=10, column=0, columnspan=2, sticky="ew", padx=5, pady=3)
         ttk.Label(interval_frame, text="Интервал (сек):  мин").pack(side="left")
         var_min = tk.StringVar()
         self.vars["poll_min"] = var_min
@@ -117,7 +120,9 @@ class VFSBotGUI:
             text="Headless (без окна браузера)",
             variable=headless_var,
         )
-        self.headless_cb.grid(row=8, column=0, columnspan=2, sticky="w", padx=5, pady=3)
+        self.headless_cb.grid(
+            row=11, column=0, columnspan=2, sticky="w", padx=5, pady=3
+        )
 
         # -- Tab 2: Connections --
         tab_conn = ttk.Frame(notebook, padding=10)
@@ -196,8 +201,11 @@ class VFSBotGUI:
             self.vars["login_url"].set(v.login_url)
             self.vars["appointment_url"].set(v.appointment_url)
             self.vars["application_centre"].set(v.application_centre)
+            self.vars["centre_keyword"].set(v.centre_keyword)
             self.vars["category"].set(v.category)
+            self.vars["category_keyword"].set(v.category_keyword)
             self.vars["sub_category"].set(v.sub_category)
+            self.vars["sub_category_keyword"].set(v.sub_category_keyword)
             self.vars["vfs_email"].set(v.email)
             self.vars["vfs_password"].set(v.password)
             self.vars["poll_min"].set(str(v.poll_interval_min_seconds))
@@ -224,8 +232,11 @@ class VFSBotGUI:
                 "https://visa.vfsglobal.com/srb/en/hrv/book-appointment",
             )
             self.vars["application_centre"].set("Visa Application Centre,Belgrade")
+            self.vars["centre_keyword"].set("belgrade")
             self.vars["category"].set("C visa")
+            self.vars["category_keyword"].set("c visa")
             self.vars["sub_category"].set("Tourist, Visit , Business")
+            self.vars["sub_category_keyword"].set("tourist")
             self.vars["vfs_email"].set(os.environ.get("VFS_EMAIL", ""))
             self.vars["vfs_password"].set(os.environ.get("VFS_PASSWORD", ""))
             self.vars["poll_min"].set("1800")
@@ -247,8 +258,11 @@ class VFSBotGUI:
                 login_url=self.vars["login_url"].get(),
                 appointment_url=self.vars["appointment_url"].get(),
                 application_centre=self.vars["application_centre"].get(),
+                centre_keyword=self.vars["centre_keyword"].get(),
                 category=self.vars["category"].get(),
+                category_keyword=self.vars["category_keyword"].get(),
                 sub_category=self.vars["sub_category"].get(),
+                sub_category_keyword=self.vars["sub_category_keyword"].get(),
                 email=self.vars["vfs_email"].get(),
                 password=self.vars["vfs_password"].get(),
                 poll_interval_min_seconds=int(self.vars["poll_min"].get() or "1800"),

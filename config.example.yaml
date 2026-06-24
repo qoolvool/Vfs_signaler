@@ -2,8 +2,13 @@ vfs:
   login_url: "https://visa.vfsglobal.com/srb/en/hrv/login"
   appointment_url: "https://visa.vfsglobal.com/srb/en/hrv/book-appointment"
   application_centre: "Visa Application Centre,Belgrade"
+  # Keywords for dropdown matching (case-insensitive substring).
+  # If omitted, defaults to the full value above (lowercased).
+  centre_keyword: "belgrade"
   category: "C visa"
+  category_keyword: "c visa"
   sub_category: "Tourist, Visit , Business"
+  sub_category_keyword: "tourist"
   # Cautious cadence for a residential/mobile proxy: a random 30-40 min gap
   # between checks. Slow enough to avoid VFS rate-limit blocks. If the bot
   # starts hitting blocks repeatedly, it automatically backs off further
