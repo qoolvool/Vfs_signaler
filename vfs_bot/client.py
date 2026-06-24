@@ -235,6 +235,8 @@ class VFSClient:
         self._wait_for_cloudflare()
         self._step_screenshot("03_cloudflare_login")
 
+        self._accept_cookies(timeout=2000)
+
         logger.info("Login step: clicking Sign In (credentials)")
         request_time = time.time()
         self._click_sign_in()
@@ -274,6 +276,7 @@ class VFSClient:
 
         logger.info("Login step: waiting for OTP email")
         otp = self.mailbox.wait_for_otp(after_timestamp=request_time)
+        self._accept_cookies(timeout=2000)
         logger.info("Login step: OTP received, entering it")
         random_delay(400, 1200)
         human_type(otp_input, otp)
@@ -282,6 +285,7 @@ class VFSClient:
         logger.info("Login step: waiting for Cloudflare on OTP page")
         self._wait_for_cloudflare()
 
+        self._accept_cookies(timeout=2000)
         logger.info("Login step: clicking Sign In (OTP)")
         self._click_sign_in()
         self.check_access_denied()
@@ -290,6 +294,7 @@ class VFSClient:
         self.check_session_expired()
         self.check_access_restricted()
 
+        self._accept_cookies(timeout=2000)
         logger.info("Login step: clicking 'Start New Booking'")
         self._click_first(
             [
@@ -523,6 +528,8 @@ class VFSClient:
             ("Appointment category", vfs.category, "selectedSubvisaCategory", "c visa"),
             ("Sub-category", vfs.sub_category, "visaCategoryCode", "tourist"),
         ]
+
+        self._accept_cookies(timeout=2000)
 
         for step, (label, value, fcn, keyword) in enumerate(dropdowns, start=1):
             logger.info(
