@@ -153,7 +153,7 @@ class TestVFSConfigDefaults:
             category="Cat",
             sub_category="Sub",
         )
-        assert v.access_denied_backoff_seconds == 1800
+        assert v.access_denied_backoff_seconds == 7500
         assert v.debug_screenshots is True
         assert v.debug_dir == "debug"
         assert v.storage_state_path == "storage_state.json"

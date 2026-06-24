@@ -20,7 +20,7 @@ class VFSConfig:
     poll_interval_min_seconds: int = 1800
     poll_interval_max_seconds: int = 2400
     reminder_interval_seconds: int = 0
-    access_denied_backoff_seconds: int = 1800
+    access_denied_backoff_seconds: int = 7500
     headless: bool = False
     storage_state_path: str = "storage_state.json"
     debug_screenshots: bool = True
