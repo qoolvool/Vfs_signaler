@@ -522,9 +522,22 @@ class VFSClient:
             # Local screenshot only — no Telegram spam per dropdown.
             self._step_screenshot(f"10_dropdown_{step}")
 
-        # Give the page a moment to render the slot-availability message after
-        # the last dropdown selection settles.
-        page.wait_for_timeout(3000)
+        # Wait for VFS to render the slot-availability result. The message
+        # lives inside a div.Error or [role='alert'] inside the form.
+        # An explicit wait is much more reliable than a fixed sleep.
+        result_selector = (
+            "app-eligibility-criteria [role='alert'], "
+            "app-eligibility-criteria .Error, "
+            "app-eligibility-criteria .alert"
+        )
+        try:
+            page.locator(result_selector).first.wait_for(
+                state="visible", timeout=15000,
+            )
+            logger.info("Slot result element appeared on page")
+        except PlaywrightTimeoutError:
+            logger.warning("No slot result element found within 15s, checking anyway")
+            page.wait_for_timeout(3000)
 
         no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
         count = no_slots.count()
@@ -555,16 +568,23 @@ class VFSClient:
         # notification shows VFS's exact wording.
         try:
             no_slots = page.get_by_text(NO_SLOTS_TEXT, exact=False)
-            if no_slots.count() > 0:
+            cnt = no_slots.count()
+            if cnt > 0:
                 text = no_slots.first.inner_text().strip()
+                logger.info("Found no-slots text (count=%d): %s", cnt, text[:200])
                 if text:
                     return text
         except Exception:
-            pass
+            logger.exception("Error checking for no-slots text")
 
-        # 2) Common containers VFS uses for availability/alert messages.
+        # 2) VFS result containers — scoped to the form first, then broader.
         candidates = [
+            "app-eligibility-criteria .Error [role='alert']",
+            "app-eligibility-criteria .Error",
+            "app-eligibility-criteria [role='alert']",
+            "app-eligibility-criteria .alert",
             "[role='alert']",
+            ".Error",
             ".alert, .alert-info, .alert-warning, .alert-success",
             ".availability-message, .slot-message, .info-message",
             "mat-hint, mat-error",
@@ -572,13 +592,27 @@ class VFSClient:
         for selector in candidates:
             try:
                 loc = page.locator(selector)
-                if loc.count() > 0:
+                cnt = loc.count()
+                if cnt > 0:
                     text = loc.first.inner_text().strip()
                     if text:
+                        logger.info("Found slot message via '%s': %s", selector, text[:200])
                         return text
+                    logger.info("Selector '%s' matched %d el(s) but text empty", selector, cnt)
             except Exception:
-                continue
+                logger.exception("Error checking selector '%s'", selector)
 
+        # 3) Last-resort diagnostic: dump the form area text so the next
+        # Telegram message still shows something useful.
+        try:
+            section = page.locator("app-eligibility-criteria")
+            if section.count() > 0:
+                full = section.first.inner_text().strip()
+                logger.warning("No result element found. Full form text: %s", full[:500])
+        except Exception:
+            pass
+
+        logger.warning("_read_slot_message: nothing found on the page")
         return None
 
     def _select_dropdown(self, label_text: str, keyword: str, formcontrolname: str) -> str:
