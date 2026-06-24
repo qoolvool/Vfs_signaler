@@ -1,0 +1,10 @@
+services:
+  vfs-bot:
+    build: .
+    container_name: vfs-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./debug:/app/debug
+      - ./storage_state.json:/app/storage_state.json

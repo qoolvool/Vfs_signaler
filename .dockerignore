@@ -1,0 +1,15 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+config.yaml
+storage_state.json
+debug/
+.coverage
+.pytest_cache
+tests/
+requirements-dev.txt
+.github/
+*.md
