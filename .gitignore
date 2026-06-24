@@ -8,3 +8,5 @@ storage_state.json
 *.png
 !assets/*.png
 debug/
+.coverage
+.pytest_cache/
