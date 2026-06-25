@@ -1,174 +1,232 @@
-# VFS Signaler — VFS Global Croatia (Belgrade) appointment watcher
+# VFS Slot Monitor
 
-The bot logs into the [VFS Global Croatia](https://visa.vfsglobal.com/srb/en/hrv/login)
-account, completes the OTP confirmation sent by email, and periodically checks
-the appointment page for available slots for the chosen application centre /
-category / sub-category. When a slot appears, the bot sends a Telegram
-notification, and when the slot disappears (was available and is gone again)
-it sends a separate notification about that too.
+Automated appointment slot watcher for [VFS Global](https://visa.vfsglobal.com/) visa centres. The bot periodically checks the VFS appointment page for available slots and sends instant Telegram notifications when one appears.
 
-The bot **does not book a slot automatically** — it only notifies you so you
-can go and book it manually in time.
+> The bot **does not book slots automatically** — it only notifies you so you can book manually in time.
 
-## Installation
+## Features
+
+- **Automated login** with email/password + OTP (read from mailbox via IMAP)
+- **Cloudflare bypass** using [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (Playwright fork with anti-detection)
+- **Human-like behavior** — randomized typing speed, mouse movements, delays between actions
+- **Telegram notifications** with screenshots on every check, login, and error
+- **Configurable dropdowns** — works for any VFS city/category via keyword matching
+- **Progressive backoff** — handles Access Denied, Account Locked, Session Expired with escalating cooldowns
+- **GUI** (tkinter) for local use, **headless mode** for servers
+- **Docker support** for one-command VPS deployment
+- **CI/CD** — linting (ruff) + tests (pytest) on Python 3.11/3.12/3.13
+
+## Architecture
+
+```
+vfs_bot/
+├── __main__.py   # Entry point: GUI or --no-gui mode
+├── main.py       # Main polling loop with error handling and backoff
+├── client.py     # VFS site automation (login, OTP, dropdowns, slot check)
+├── browser.py    # Patchright browser session management
+├── human.py      # Human-like typing, mouse movement, random delays
+├── mailbox.py    # IMAP client for OTP extraction
+├── notifier.py   # Telegram bot notifications (text + photos)
+├── config.py     # Dataclass-based config (YAML + .env)
+└── gui.py        # tkinter GUI for configuration and control
+```
+
+## How it works
+
+```mermaid
+sequenceDiagram
+    participant Bot
+    participant Browser
+    participant VFS as VFS Global
+    participant CF as Cloudflare
+    participant IMAP as Mailbox (IMAP)
+    participant TG as Telegram
+
+    Bot->>Browser: Launch (Patchright + Chromium)
+    Bot->>TG: "Monitoring started"
+
+    loop Every 30–40 min
+        Bot->>Browser: Open appointment page
+        alt Session expired
+            Bot->>Browser: Go to login page
+            Browser->>VFS: GET /login
+            VFS-->>Browser: Login form
+            Bot->>Browser: Type email + password
+            Browser->>CF: Solve challenge
+            CF-->>Browser: Token
+            Bot->>Browser: Click "Sign In"
+            Browser->>VFS: POST credentials
+            VFS-->>Browser: OTP form
+            VFS->>IMAP: Send OTP email
+            Bot->>IMAP: Poll for OTP
+            IMAP-->>Bot: OTP code
+            Bot->>Browser: Type OTP + click "Sign In"
+            Browser->>VFS: POST OTP
+            VFS-->>Browser: Dashboard
+            Bot->>Browser: Click "Start New Booking"
+        end
+
+        Bot->>Browser: Select centre, category, sub-category
+        Browser->>VFS: Form submission
+        VFS-->>Browser: Slot availability result
+
+        alt Slot available
+            Bot->>TG: "SLOT FOUND" + screenshot
+        else No slots
+            Bot->>TG: "No slots" + screenshot
+        end
+
+        Note over Bot: Random delay 30–40 min
+    end
+```
+
+## Error handling flow
+
+```mermaid
+flowchart TD
+    A[Check slots] -->|Success| B[Reset backoff counter]
+    A -->|Access Denied 429002| C[Clear session + backoff 2h 5min × multiplier]
+    A -->|Account Locked 429202| D[Clear session + backoff 2h]
+    A -->|Access Restricted 429001| E[Clear session + backoff 2h]
+    A -->|Session Expired| F[Clear session + retry immediately]
+    A -->|Request Timeout 504| G[Backoff 10min × multiplier]
+    A -->|Other error| H[Send traceback to Telegram + continue]
+
+    C --> I[Progressive multiplier: 1x → 2x → 3x → 4x cap]
+    G --> I
+    B --> J[Next check in 30–40 min]
+    D --> J
+    E --> J
+    F --> A
+    H --> J
+    I --> J
+```
+
+## Quick start
+
+### Local
 
 ```bash
+# 1. Clone and install
+git clone https://github.com/qoolvool/Vfs_signaler.git
+cd Vfs_signaler
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 patchright install chromium
+
+# 2. Configure
+cp .env.example .env           # fill in credentials
+cp config.example.yaml config.yaml  # adjust city/category/intervals
+
+# 3. Run with GUI
+python -m vfs_bot
+
+# Or run headless
+python -m vfs_bot --no-gui
 ```
 
-The bot uses **[patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)**
-(a Playwright fork tuned for higher automation reliability) and launches
-**real Google Chrome** (via `channel="chrome"`) instead of the bundled
-Chromium — this significantly improves compatibility with the site's anti-bot
-checks. So Google Chrome must be installed on the machine:
-- Download and install it from [google.com/chrome](https://www.google.com/chrome/).
+### Docker
 
-If Chrome is not found, the bot automatically falls back to the bundled
-Chromium (but reliability is lower).
+```bash
+cp .env.example .env
+cp config.example.yaml config.yaml
+# Edit both files...
+
+docker compose up -d        # start
+docker compose logs -f       # view logs
+docker compose down          # stop
+```
 
 ## Configuration
 
-1. Copy `.env.example` to `.env` and fill in:
-   - `VFS_EMAIL` / `VFS_PASSWORD` — your VFS Global account credentials.
-   - `IMAP_USERNAME` / `IMAP_PASSWORD` — the mailbox that receives the OTP code
-     (for Gmail, use an [app password](https://support.google.com/accounts/answer/185833)).
-   - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — for notifications (optional;
-     if not set, notifications go to the log only).
-   - `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` — proxy
-     (optional, but **strongly recommended**, see below).
+### `.env` — credentials (not committed to git)
 
-2. Copy `config.example.yaml` to `config.yaml` and adjust as needed:
-   - `application_centre`, `category`, `sub_category` — the exact values
-     shown in the dropdowns on the appointment page (e.g.
-     `"Visa Application Centre, Belgrade"`, `"C visa"`,
-     `"Tourist , Visit , Business"`).
-   - `poll_interval_min_seconds` / `poll_interval_max_seconds` — bounds of the
-     random interval between checks (default 120–300 sec, i.e. 2–5 minutes).
-     A random interval within this range is picked on every cycle so requests
-     aren't perfectly regular, which is friendlier to the site's
-     bot-detection system.
-   - `reminder_interval_seconds` — if > 0, the bot will repeat the Telegram
-     notification every N seconds while the slot is still available (useful if
-     you didn't notice the first message right away). Default `0` — notify
-     only when the slot first appears.
-   - `access_denied_backoff_seconds` — how long to pause after VFS responds
-     with "Access Denied / 429002 Unauthorised Activity" (a rate-limit
-     response). Retrying quickly only extends the lockout, so the default is
-     30 minutes.
-   - `headless: false` — it's recommended to keep the browser visible,
-     especially on the first run, until you've confirmed the login/OTP flow
-     completes successfully.
+| Variable | Description |
+|---|---|
+| `VFS_EMAIL` | VFS Global account email |
+| `VFS_PASSWORD` | VFS Global account password |
+| `IMAP_USERNAME` | Mailbox for OTP (e.g. Gmail) |
+| `IMAP_PASSWORD` | Mailbox password ([app password](https://support.google.com/accounts/answer/185833) for Gmail) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+| `PROXY_SERVER` | Optional: `http://host:port` or `socks5://host:port` |
 
-## Running
+### `config.yaml` — behavior settings
 
-```bash
-python -m vfs_bot.main
+```yaml
+vfs:
+  login_url: "https://visa.vfsglobal.com/srb/en/hrv/login"
+  appointment_url: "https://visa.vfsglobal.com/srb/en/hrv/book-appointment"
+
+  # Full dropdown text + keyword for fuzzy matching
+  application_centre: "Visa Application Centre,Belgrade"
+  centre_keyword: "belgrade"
+  category: "C visa"
+  category_keyword: "c visa"
+  sub_category: "Tourist, Visit , Business"
+  sub_category_keyword: "tourist"
+
+  poll_interval_min_seconds: 1800   # 30 min
+  poll_interval_max_seconds: 2400   # 40 min
+  access_denied_backoff_seconds: 7500  # 2h 5min
+  headless: false
 ```
 
-On the first run, the bot will:
-1. Open the login page, enter the email/password, and wait for the anti-bot
-   challenge to complete.
-2. On the OTP page, wait for VFS's email in your mailbox, grab the code, and
-   enter it.
-3. After a successful login, save cookies to `storage_state.json` — on
-   subsequent runs, no repeated login/OTP is needed while the session is
-   alive. Cookies are also saved after every check cycle (atomic write), so
-   the session isn't lost if the process crashes.
-4. Go to the appointment page, select the centre/category/sub-category, and
-   check for available slots at the configured interval.
+To use for a different VFS centre, change the URLs and keywords — no code changes needed.
 
-## Debugging: seeing what the bot is doing
+## Proxy (recommended)
 
-There are three ways to understand what's happening:
-
-1. **Console logs.** The bot logs every step of the login flow in detail:
-   ```
-   Login step: opening login page ...
-   Login step: entering email
-   Login step: entering password
-   Login step: waiting for Cloudflare on login page
-   Login step: clicking Sign In (credentials)
-   Login step: waiting for OTP input field
-   Login step: waiting for OTP email
-   Login step: OTP received, entering it
-   Login step: waiting for Cloudflare on OTP page
-   Login step: clicking Sign In (OTP)
-   Login step: waiting for redirect to appointment page
-   Login successful
-   ```
-   If the bot hangs or crashes, the last line immediately shows which step it
-   was on.
-
-2. **Step-by-step screenshots** (`vfs.debug_screenshots: true`, enabled by
-   default). At every key login step (login page, after filling in
-   credentials, after Cloudflare, OTP page, after entering OTP,
-   success/failure) a PNG is saved into `vfs.debug_dir` (default `debug/`).
-   This is useful even without a GUI — you can just download the folder and
-   look at the images.
-
-3. **Telegram notifications with screenshots.**
-   - After a successful login, Telegram receives a screenshot of the
-     appointment page — visual confirmation that the bot actually got into the
-     account.
-   - If login fails, you get a screenshot of whatever it got stuck on
-     (login/OTP page, Cloudflare error).
-   - Any error during a check cycle also comes with a screenshot.
-
-Besides screenshots, with `headless: false` and access to a graphical
-environment (e.g. X11/VNC on a server, or running on your own machine) you can
-simply watch the open browser window in real time.
-
-## Human-paced interactions
-
-During login, the bot doesn't paste the email/password/OTP instantly —
-instead it types them character by character with randomized delays
-(`vfs_bot/human.py`), clears each field before typing like a real user, moves
-the mouse towards buttons before clicking, and adds random pauses between
-steps. This makes the automated session behave closer to a real user
-session, improving reliability with the site's anti-bot checks. Because of
-this, login takes 10-20 seconds longer — that's expected.
-
-## Proxy (recommended for reliable access)
-
-VFS Global's anti-bot protection is stricter for datacenter IPs (VPS, cloud,
-hosting). If the bot sees a page saying something like *"try again in one
-hour"* or fails the challenge, it's almost certainly an IP issue. The solution
-is a **residential or mobile proxy**.
-
-Configuration: set `proxy.server` in `config.yaml` or `PROXY_SERVER` in
-`.env`:
+VFS Global uses Cloudflare which blocks datacenter IPs. A **residential or mobile proxy** is strongly recommended:
 
 ```yaml
 proxy:
-  server: "http://1.2.3.4:8080"      # or socks5://1.2.3.4:1080
+  server: "socks5://1.2.3.4:1080"
 ```
 
-Proxy credentials go in `.env` (`PROXY_USERNAME` / `PROXY_PASSWORD`) so they
-aren't stored in the repository. If `server` is empty, the bot runs without a
-proxy.
+Credentials via `.env`: `PROXY_USERNAME`, `PROXY_PASSWORD`.
 
-Recommendations:
-- Use a **residential** proxy, not a datacenter one — datacenter ranges are
-  often flagged too, sometimes aggressively.
-- A **sticky** IP that doesn't change between login and polling is preferable,
-  otherwise the session may get invalidated.
-- Pick an IP region close to Serbia/the Balkans if possible.
+Tips:
+- Use a **residential** proxy (not datacenter)
+- Use a **sticky** IP (same IP for login and polling)
+- Pick a region close to Serbia/Balkans
 
-## A note on selectors
+## Development
 
-VFS Global periodically changes its site layout and anti-bot protection. The
-selectors in `vfs_bot/client.py` are written to be as robust as possible (by
-label text and button roles), but if the site changes, `client.py` will need
-updating. It helps to run with `headless: false` and/or use
-`playwright codegen https://visa.vfsglobal.com/srb/en/hrv/login` to inspect
-the current markup.
+```bash
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest --cov=vfs_bot -v
+
+# Lint
+ruff check .
+ruff format --check .
+```
+
+CI runs automatically on push/PR: lint (ruff) + tests on Python 3.11, 3.12, 3.13.
+
+## Tech stack
+
+| Component | Technology |
+|---|---|
+| Browser automation | [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (Playwright fork) |
+| OTP extraction | IMAP (imaplib) |
+| Notifications | Telegram Bot API (requests) |
+| Configuration | YAML + dataclasses + python-dotenv |
+| GUI | tkinter |
+| Testing | pytest + pytest-cov |
+| Linting | ruff |
+| CI/CD | GitHub Actions |
+| Containerization | Docker + Docker Compose |
+| Python | 3.11+ |
 
 ## Security
 
-- Don't commit `.env`, `config.yaml`, or `storage_state.json` — they're
-  already in `.gitignore`.
-- Only use this bot to check slot availability for **your own** VFS Global
-  account.
+- `.env`, `config.yaml`, `storage_state.json` are in `.gitignore`
+- Credentials are never logged or sent to Telegram
+- Only use this bot for **your own** VFS Global account
+
+## License
+
+MIT
