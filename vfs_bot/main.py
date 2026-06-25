@@ -41,6 +41,7 @@ def run(
         config = load_config(config_path)
     mailbox = OTPMailbox(config.imap)
     notifier = TelegramNotifier(config.telegram)
+    notifier.start_polling(stop_event)
 
     with BrowserSession(config.vfs, config.proxy) as session:
         page = session.new_page()

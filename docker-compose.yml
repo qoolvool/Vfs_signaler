@@ -8,3 +8,4 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./debug:/app/debug
       - ./storage_state.json:/app/storage_state.json
+      - ./subscribers.json:/app/subscribers.json

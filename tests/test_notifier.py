@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 import pytest
@@ -8,18 +9,53 @@ from vfs_bot.notifier import TelegramNotifier
 
 
 @pytest.fixture()
-def configured():
+def configured(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     return TelegramNotifier(TelegramConfig(bot_token="tok123", chat_id="42"))
 
 
 @pytest.fixture()
-def multi_chat():
-    return TelegramNotifier(TelegramConfig(bot_token="tok123", chat_id="42,99,  101"))
+def multi_chat(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    return TelegramNotifier(TelegramConfig(bot_token="tok123", chat_id="42, 99,101"))
 
 
 @pytest.fixture()
-def unconfigured():
+def unconfigured(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     return TelegramNotifier(TelegramConfig(bot_token="", chat_id=""))
+
+
+class TestSubscribers:
+    def test_loads_from_file(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "subscribers.json").write_text('["111","222"]')
+        n = TelegramNotifier(TelegramConfig(bot_token="tok", chat_id=""))
+        assert sorted(n.chat_ids) == ["111", "222"]
+
+    def test_config_chat_id_seeds_subscribers(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        n = TelegramNotifier(TelegramConfig(bot_token="tok", chat_id="42"))
+        assert "42" in n.chat_ids
+
+    def test_merges_file_and_config(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "subscribers.json").write_text('["111"]')
+        n = TelegramNotifier(TelegramConfig(bot_token="tok", chat_id="42"))
+        assert sorted(n.chat_ids) == ["111", "42"]
+
+    def test_saves_subscribers(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        n = TelegramNotifier(TelegramConfig(bot_token="tok", chat_id=""))
+        n._subscribers.add("55")
+        n._save_subscribers()
+        data = json.loads((tmp_path / "subscribers.json").read_text())
+        assert data == ["55"]
+
+    def test_no_file_starts_empty(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        n = TelegramNotifier(TelegramConfig(bot_token="tok", chat_id=""))
+        assert n.chat_ids == []
 
 
 class TestSend:
@@ -36,7 +72,7 @@ class TestSend:
         multi_chat.send("hello")
         assert mock_post.call_count == 3
         chat_ids_sent = [c[1]["data"]["chat_id"] for c in mock_post.call_args_list]
-        assert chat_ids_sent == ["42", "99", "101"]
+        assert sorted(chat_ids_sent) == ["101", "42", "99"]
 
     @patch("vfs_bot.notifier.requests.post")
     def test_skips_when_no_token(self, mock_post, unconfigured):
@@ -75,7 +111,7 @@ class TestSendPhoto:
         multi_chat.send_photo(str(photo), "cap")
         assert mock_post.call_count == 3
         chat_ids_sent = [c[1]["data"]["chat_id"] for c in mock_post.call_args_list]
-        assert chat_ids_sent == ["42", "99", "101"]
+        assert sorted(chat_ids_sent) == ["101", "42", "99"]
 
     @patch("vfs_bot.notifier.requests.post")
     def test_skips_when_no_token(self, mock_post, unconfigured, tmp_path):

@@ -5,6 +5,7 @@ venv/
 .env
 config.yaml
 storage_state.json
+subscribers.json
 *.png
 !assets/*.png
 debug/

@@ -149,8 +149,20 @@ docker compose down          # stop
 | `IMAP_USERNAME` | Mailbox for OTP (e.g. Gmail) |
 | `IMAP_PASSWORD` | Mailbox password ([app password](https://support.google.com/accounts/answer/185833) for Gmail) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_CHAT_ID` | Telegram chat IDs, comma-separated (e.g. `123,456`) |
+| `TELEGRAM_CHAT_ID` | (Optional) Initial chat ID for the bot owner |
 | `PROXY_SERVER` | Optional: `http://host:port` or `socks5://host:port` |
+
+### Telegram subscriptions
+
+Anyone can subscribe to notifications by sending `/start` to the bot in Telegram. The bot automatically manages subscribers:
+
+| Command | Action |
+|---|---|
+| `/start` | Subscribe to notifications |
+| `/stop` | Unsubscribe |
+| `/status` | Check if the bot is running |
+
+Subscribers are saved to `subscribers.json` and persist across restarts. The `TELEGRAM_CHAT_ID` in `.env` is optional — it seeds the initial subscriber list so the owner gets notifications without sending `/start`.
 
 ### `config.yaml` — behavior settings
 
