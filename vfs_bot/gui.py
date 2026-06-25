@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import scrolledtext, ttk
 
 from .config import (
+    AccountConfig,
     AppConfig,
     IMAPConfig,
     ProxyConfig,
@@ -42,6 +43,9 @@ class VFSBotGUI:
 
         self.vars: dict[str, tk.Variable] = {}
         self.entries: list[tk.Widget] = []
+
+        self._account_rows: list[dict] = []
+        self._account_entries: list[tk.Widget] = []
 
         self._build_ui()
         self._load_defaults()
@@ -146,6 +150,52 @@ class VFSBotGUI:
         self._entry(proxy_frame, 1, "Username:", "proxy_username")
         self._entry(proxy_frame, 2, "Password:", "proxy_password", show="*")
 
+        # -- Tab 3: Accounts --
+        tab_acc = ttk.Frame(notebook, padding=10)
+        notebook.add(tab_acc, text=" Аккаунты ")
+
+        ttk.Label(
+            tab_acc,
+            text=(
+                "Дополнительные аккаунты VFS. При блокировке одного бот\n"
+                "переключится на следующий. Если список пуст, используются\n"
+                "Email/Password со вкладки VFS."
+            ),
+            justify="left",
+        ).pack(anchor="w", pady=(0, 8))
+
+        scroll_frame = ttk.Frame(tab_acc)
+        scroll_frame.pack(fill="both", expand=True)
+
+        self._acc_canvas = tk.Canvas(scroll_frame, highlightthickness=0, borderwidth=0)
+        acc_scrollbar = ttk.Scrollbar(
+            scroll_frame, orient="vertical", command=self._acc_canvas.yview
+        )
+        self._acc_inner = ttk.Frame(self._acc_canvas)
+
+        self._acc_inner.bind(
+            "<Configure>",
+            lambda _: self._acc_canvas.configure(
+                scrollregion=self._acc_canvas.bbox("all")
+            ),
+        )
+        self._acc_canvas_win = self._acc_canvas.create_window(
+            (0, 0), window=self._acc_inner, anchor="nw"
+        )
+        self._acc_canvas.configure(yscrollcommand=acc_scrollbar.set)
+        self._acc_canvas.bind(
+            "<Configure>",
+            lambda e: self._acc_canvas.itemconfig(self._acc_canvas_win, width=e.width),
+        )
+
+        self._acc_canvas.pack(side="left", fill="both", expand=True)
+        acc_scrollbar.pack(side="right", fill="y")
+
+        self._add_acc_btn = ttk.Button(
+            tab_acc, text="+ Добавить аккаунт", command=self._add_account_row
+        )
+        self._add_acc_btn.pack(anchor="w", pady=(8, 0))
+
         # ---- Controls ----
         ctrl_frame = ttk.Frame(root)
         ctrl_frame.pack(fill="x", padx=10, pady=8)
@@ -188,6 +238,72 @@ class VFSBotGUI:
         )
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
 
+    # ---- Account management ----
+
+    def _add_account_row(
+        self,
+        label="",
+        vfs_email="",
+        vfs_password="",
+        imap_username="",
+        imap_password="",
+    ):
+        idx = len(self._account_rows)
+        card = ttk.LabelFrame(self._acc_inner, text=f"Аккаунт {idx + 1}", padding=8)
+        card.pack(fill="x", pady=(0, 5), padx=2)
+
+        row_vars: dict[str, tk.StringVar] = {}
+        row_entries: list[tk.Widget] = []
+
+        fields = [
+            ("Метка:", "label", label, None),
+            ("VFS Email:", "vfs_email", vfs_email, None),
+            ("VFS Password:", "vfs_password", vfs_password, "*"),
+            ("IMAP Email:", "imap_username", imap_username, None),
+            ("IMAP Password:", "imap_password", imap_password, "*"),
+        ]
+
+        for r, (lbl_text, key, default, show) in enumerate(fields):
+            ttk.Label(card, text=lbl_text, anchor="w").grid(
+                row=r, column=0, sticky="w", padx=(5, 10), pady=2
+            )
+            var = tk.StringVar(value=default)
+            row_vars[key] = var
+            kw: dict = {"textvariable": var, "width": 35}
+            if show:
+                kw["show"] = show
+            entry = ttk.Entry(card, **kw)
+            entry.grid(row=r, column=1, sticky="ew", padx=5, pady=2)
+            row_entries.append(entry)
+
+        card.columnconfigure(1, weight=1)
+
+        del_btn = ttk.Button(
+            card, text="✕ Удалить", command=lambda c=card: self._remove_account_row(c)
+        )
+        del_btn.grid(row=0, column=2, padx=(10, 5), pady=2)
+
+        row_data = {
+            "frame": card,
+            "vars": row_vars,
+            "entries": row_entries,
+            "delete_btn": del_btn,
+        }
+        self._account_rows.append(row_data)
+        self._account_entries.extend(row_entries)
+
+    def _remove_account_row(self, card):
+        for row in self._account_rows:
+            if row["frame"] is card:
+                for entry in row["entries"]:
+                    if entry in self._account_entries:
+                        self._account_entries.remove(entry)
+                self._account_rows.remove(row)
+                break
+        card.destroy()
+        for i, row in enumerate(self._account_rows):
+            row["frame"].config(text=f"Аккаунт {i + 1}")
+
     # ---- Config loading ----
 
     def _load_defaults(self):
@@ -226,6 +342,15 @@ class VFSBotGUI:
             self.vars["proxy_server"].set(p.server)
             self.vars["proxy_username"].set(p.username)
             self.vars["proxy_password"].set(p.password)
+
+            for acc in cfg.accounts:
+                self._add_account_row(
+                    label=acc.label,
+                    vfs_email=acc.vfs_email,
+                    vfs_password=acc.vfs_password,
+                    imap_username=acc.imap_username,
+                    imap_password=acc.imap_password,
+                )
         else:
             self.vars["login_url"].set("https://visa.vfsglobal.com/srb/en/hrv/login")
             self.vars["appointment_url"].set(
@@ -253,6 +378,22 @@ class VFSBotGUI:
             self.vars["proxy_password"].set(os.environ.get("PROXY_PASSWORD", ""))
 
     def _build_config(self) -> AppConfig:
+        accounts = []
+        for row in self._account_rows:
+            v = row["vars"]
+            email = v["vfs_email"].get().strip()
+            if not email:
+                continue
+            accounts.append(
+                AccountConfig(
+                    vfs_email=email,
+                    vfs_password=v["vfs_password"].get(),
+                    imap_username=v["imap_username"].get(),
+                    imap_password=v["imap_password"].get(),
+                    label=v["label"].get(),
+                )
+            )
+
         return AppConfig(
             vfs=VFSConfig(
                 login_url=self.vars["login_url"].get(),
@@ -284,6 +425,7 @@ class VFSBotGUI:
                 username=self.vars["proxy_username"].get(),
                 password=self.vars["proxy_password"].get(),
             ),
+            accounts=accounts,
         )
 
     # ---- Bot control ----
@@ -292,7 +434,12 @@ class VFSBotGUI:
         state = "normal" if enabled else "disabled"
         for entry in self.entries:
             entry.config(state=state)
+        for entry in self._account_entries:
+            entry.config(state=state)
         self.headless_cb.config(state=state)
+        self._add_acc_btn.config(state=state)
+        for row in self._account_rows:
+            row["delete_btn"].config(state=state)
 
     def _start_bot(self):
         if self.bot_thread and self.bot_thread.is_alive():
