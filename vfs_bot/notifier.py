@@ -153,9 +153,7 @@ class TelegramNotifier:
                     timeout=15,
                 )
             except requests.RequestException:
-                logger.exception(
-                    "Failed to send Telegram notification to %s", chat_id
-                )
+                logger.exception("Failed to send Telegram notification to %s", chat_id)
 
     def send_photo(self, path: str, caption: str = "") -> None:
         logger.info("[screenshot] %s %s", path, caption)
@@ -178,6 +176,4 @@ class TelegramNotifier:
                         timeout=30,
                     )
             except (requests.RequestException, OSError):
-                logger.exception(
-                    "Failed to send Telegram screenshot to %s", chat_id
-                )
+                logger.exception("Failed to send Telegram screenshot to %s", chat_id)

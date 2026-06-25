@@ -66,6 +66,19 @@ class TelegramConfig:
 
 
 @dataclass
+class AccountConfig:
+    """A single VFS Global login. Each account is registered to its own email,
+    so each may point at a different OTP mailbox. imap_username/imap_password
+    fall back to the global IMAP config when left empty."""
+
+    vfs_email: str
+    vfs_password: str
+    imap_username: str = ""
+    imap_password: str = ""
+    label: str = ""
+
+
+@dataclass
 class ProxyConfig:
     # e.g. "http://host:port" or "socks5://host:port". Empty disables the proxy.
     server: str = field(default_factory=lambda: os.environ.get("PROXY_SERVER", ""))
@@ -93,15 +106,19 @@ class AppConfig:
     imap: IMAPConfig
     telegram: TelegramConfig
     proxy: ProxyConfig
+    accounts: list[AccountConfig] = field(default_factory=list)
 
 
 def load_config(path: str = "config.yaml") -> AppConfig:
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
+    accounts = [AccountConfig(**a) for a in (raw.get("accounts") or [])]
+
     return AppConfig(
         vfs=VFSConfig(**raw["vfs"]),
         imap=IMAPConfig(**raw["imap"]),
         telegram=TelegramConfig(**(raw.get("telegram") or {})),
         proxy=ProxyConfig(**(raw.get("proxy") or {})),
+        accounts=accounts,
     )

@@ -42,6 +42,28 @@ imap:
   poll_timeout_seconds: 120
   poll_interval_seconds: 5
 
+# Optional: multiple VFS accounts. When one gets blocked (Access Denied /
+# Account Locked / Access Restricted), the bot automatically switches to the
+# next available account and parks the blocked one until its cooldown expires.
+# Each account keeps its own cookie file (storage_state_<label>.json).
+# If omitted, the bot uses the single VFS_EMAIL/VFS_PASSWORD from .env.
+#
+# imap_username/imap_password are the mailbox that receives THAT account's OTP.
+# Leave them out to reuse the global imap settings above (only works if all
+# accounts share one mailbox).
+#
+# accounts:
+#   - vfs_email: "first@example.com"
+#     vfs_password: "password1"
+#     imap_username: "first@gmail.com"
+#     imap_password: "app_password1"
+#     label: "primary"
+#   - vfs_email: "second@example.com"
+#     vfs_password: "password2"
+#     imap_username: "second@gmail.com"
+#     imap_password: "app_password2"
+#     label: "backup"
+
 telegram: {}
 
 # Optional. Strongly recommended to use a residential proxy — Cloudflare

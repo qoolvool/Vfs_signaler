@@ -17,6 +17,10 @@ class BrowserSession:
     def __init__(self, config: VFSConfig, proxy: ProxyConfig | None = None):
         self.config = config
         self.proxy = proxy
+        # The active cookie store. Starts at the config default but can be
+        # swapped at runtime (switch_storage_state) to support multiple
+        # accounts, each with its own session file.
+        self.storage_state_path = config.storage_state_path
         self._playwright = None
         self._browser = None
         self.context: BrowserContext | None = None
@@ -47,17 +51,32 @@ class BrowserSession:
             launch_kwargs.pop("channel")
             self._browser = self._playwright.chromium.launch(**launch_kwargs)
 
+        self.context = self._new_context()
+        return self
+
+    def _new_context(self) -> BrowserContext:
         storage_state = (
-            self.config.storage_state_path
-            if Path(self.config.storage_state_path).exists()
-            else None
+            self.storage_state_path if Path(self.storage_state_path).exists() else None
         )
-        self.context = self._browser.new_context(
+        return self._browser.new_context(
             locale="en-US",
             viewport={"width": 1366, "height": 900},
             storage_state=storage_state,
         )
-        return self
+
+    def switch_storage_state(self, path: str, *, save_current: bool = True) -> None:
+        """Switches the active session to `path`, recreating the browser
+        context from that account's cookie file. With save_current=False the
+        outgoing context's cookies are dropped (used right after clear_state,
+        when the previous account was blocked and its session is worthless)."""
+        if self.context:
+            if save_current:
+                self.save_state()
+            self.context.close()
+            self.context = None
+        self.storage_state_path = path
+        self.context = self._new_context()
+        logger.info("Switched browser session to %s", path)
 
     def __exit__(self, exc_type, exc, tb) -> None:
         if self.context:
@@ -77,7 +96,7 @@ class BrowserSession:
         if not self.context:
             return
 
-        target = Path(self.config.storage_state_path)
+        target = Path(self.storage_state_path)
         state = self.context.storage_state()
 
         fd, tmp_path = tempfile.mkstemp(
@@ -104,7 +123,7 @@ class BrowserSession:
             except Exception:
                 logger.exception("Failed to clear in-memory cookies")
 
-        target = Path(self.config.storage_state_path)
+        target = Path(self.storage_state_path)
         try:
             target.unlink()
             logger.info("Deleted %s to force a fresh session", target)

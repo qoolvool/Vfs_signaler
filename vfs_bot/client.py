@@ -7,7 +7,7 @@ from pathlib import Path
 from patchright.sync_api import Locator, Page
 from patchright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from .config import AppConfig
+from .config import AccountConfig, AppConfig
 from .human import (
     human_click,
     human_mouse_move_to,
@@ -93,11 +93,23 @@ class VFSClient:
         config: AppConfig,
         mailbox: OTPMailbox,
         notifier: TelegramNotifier | None = None,
+        account: AccountConfig | None = None,
     ):
         self.page = page
         self.config = config
         self.mailbox = mailbox
         self.notifier = notifier
+        # When set, the active account's credentials override the legacy
+        # single-account values in config.vfs.
+        self.account = account
+
+    @property
+    def _email(self) -> str:
+        return self.account.vfs_email if self.account else self.config.vfs.email
+
+    @property
+    def _password(self) -> str:
+        return self.account.vfs_password if self.account else self.config.vfs.password
 
     # ------------------------------------------------------------------
     # Session state
@@ -199,6 +211,7 @@ class VFSClient:
         page = self.page
         vfs = self.config.vfs
 
+        logger.info("Login step: logging in as %s", self._email)
         logger.info("Login step: opening login page %s", vfs.login_url)
         page.goto(vfs.login_url, wait_until="domcontentloaded")
         random_delay(500, 1500)
@@ -217,7 +230,7 @@ class VFSClient:
                 lambda: page.get_by_placeholder(re.compile("email", re.I)),
                 lambda: page.locator("input[type='email']"),
             ],
-            vfs.email,
+            self._email,
         )
         random_delay(200, 700)
 
@@ -227,7 +240,7 @@ class VFSClient:
                 lambda: page.get_by_label("Password", exact=False),
                 lambda: page.locator("input[type='password']"),
             ],
-            vfs.password,
+            self._password,
         )
         self._step_screenshot("02_credentials_filled")
 

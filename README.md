@@ -11,6 +11,7 @@ Automated appointment slot watcher for [VFS Global](https://visa.vfsglobal.com/)
 - **Human-like behavior** — randomized typing speed, mouse movements, delays between actions
 - **Telegram notifications** with screenshots on every check, login, and error
 - **Configurable dropdowns** — works for any VFS city/category via keyword matching
+- **Multiple accounts** — rotates to a backup account when one gets blocked
 - **Progressive backoff** — handles Access Denied, Account Locked, Session Expired with escalating cooldowns
 - **GUI** (tkinter) for local use, **headless mode** for servers
 - **Docker support** for one-command VPS deployment
@@ -186,6 +187,37 @@ vfs:
 ```
 
 To use for a different VFS centre, change the URLs and keywords — no code changes needed.
+
+### Multiple accounts
+
+Define several VFS logins under `accounts:` and the bot automatically fails over: when one account is blocked (Access Denied / Account Locked / Access Restricted), it's parked until its cooldown expires and the bot continues under the next available account. It only sleeps when *every* account is cooling down — then until the soonest one frees up.
+
+```yaml
+accounts:
+  - vfs_email: "first@example.com"
+    vfs_password: "password1"
+    imap_username: "first@gmail.com"   # mailbox that receives THIS account's OTP
+    imap_password: "app_password1"
+    label: "primary"
+  - vfs_email: "second@example.com"
+    vfs_password: "password2"
+    imap_username: "second@gmail.com"
+    imap_password: "app_password2"
+    label: "backup"
+```
+
+Each account keeps its own cookie file (`storage_state_<label>.json`), so sessions never collide. `imap_username`/`imap_password` are optional — omit them to reuse the global `imap` settings (only valid if all accounts share one mailbox). If no `accounts:` block is present, the bot falls back to the single `VFS_EMAIL`/`VFS_PASSWORD` from `.env`.
+
+```mermaid
+flowchart LR
+    A[Account A active] -->|blocked| B[Park A + cooldown]
+    B --> C{Another account free?}
+    C -->|yes| D[Switch to Account B]
+    C -->|no| E[Sleep until soonest frees up]
+    E --> F[Resume with that account]
+    D --> G[Continue checking]
+    F --> G
+```
 
 ## Proxy (recommended)
 
