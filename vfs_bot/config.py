@@ -57,6 +57,13 @@ class TelegramConfig:
     )
     chat_id: str = field(default_factory=lambda: os.environ.get("TELEGRAM_CHAT_ID", ""))
 
+    @property
+    def chat_ids(self) -> list[str]:
+        """Returns a list of chat IDs, splitting comma-separated values."""
+        if not self.chat_id:
+            return []
+        return [cid.strip() for cid in self.chat_id.split(",") if cid.strip()]
+
 
 @dataclass
 class ProxyConfig:

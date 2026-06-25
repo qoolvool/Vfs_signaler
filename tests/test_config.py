@@ -5,6 +5,7 @@ import pytest
 from vfs_bot.config import (
     AppConfig,
     ProxyConfig,
+    TelegramConfig,
     VFSConfig,
     load_config,
 )
@@ -184,3 +185,21 @@ class TestVFSConfigDefaults:
         assert v.centre_keyword == "belgrade"
         assert v.category_keyword == "c visa"
         assert v.sub_category_keyword == "tourist"
+
+
+class TestTelegramConfig:
+    def test_single_chat_id(self):
+        t = TelegramConfig(bot_token="tok", chat_id="42")
+        assert t.chat_ids == ["42"]
+
+    def test_multiple_chat_ids(self):
+        t = TelegramConfig(bot_token="tok", chat_id="42, 99,101")
+        assert t.chat_ids == ["42", "99", "101"]
+
+    def test_empty_chat_id(self):
+        t = TelegramConfig(bot_token="tok", chat_id="")
+        assert t.chat_ids == []
+
+    def test_trailing_commas_ignored(self):
+        t = TelegramConfig(bot_token="tok", chat_id="42,,, 99, ")
+        assert t.chat_ids == ["42", "99"]

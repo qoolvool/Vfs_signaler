@@ -149,7 +149,7 @@ docker compose down          # stop
 | `IMAP_USERNAME` | Mailbox for OTP (e.g. Gmail) |
 | `IMAP_PASSWORD` | Mailbox password ([app password](https://support.google.com/accounts/answer/185833) for Gmail) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+| `TELEGRAM_CHAT_ID` | Telegram chat IDs, comma-separated (e.g. `123,456`) |
 | `PROXY_SERVER` | Optional: `http://host:port` or `socks5://host:port` |
 
 ### `config.yaml` — behavior settings

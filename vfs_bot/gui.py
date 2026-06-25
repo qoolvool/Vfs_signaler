@@ -138,7 +138,7 @@ class VFSBotGUI:
         tg_frame = ttk.LabelFrame(tab_conn, text="Telegram", padding=8)
         tg_frame.pack(fill="x", pady=(0, 8))
         self._entry(tg_frame, 0, "Bot Token:", "tg_bot_token", show="*")
-        self._entry(tg_frame, 1, "Chat ID:", "tg_chat_id")
+        self._entry(tg_frame, 1, "Chat IDs (через запятую):", "tg_chat_id")
 
         proxy_frame = ttk.LabelFrame(tab_conn, text="Proxy", padding=8)
         proxy_frame.pack(fill="x", pady=(0, 8))
